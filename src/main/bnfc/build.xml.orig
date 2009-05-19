@@ -1,0 +1,132 @@
+<?xml version='1.0'?>
+<project name="BNFC" xmlns:ac="antlib:net.sf.antcontrib"
+	 default="help" basedir=".">
+  <!-- ****************** BUILD ********************* -->
+  <property name="bnfc.dir" value="${basedir}"/>
+  <property name="scala.dir" value="${basedir}/../scala"/>
+  <property name="bnfc.package" value="com.biosimilarity.reflection"/>
+  <property name="bnfc.artifact" value="rlambda"/>
+  <property name="bnfc.reverse.path"
+	    value="`echo ${bnfc.package} | sed 's/\./\//g'`"/>
+  <path id="bnfc.stem.path">
+    <pathelement location="${bnfc.package}"/>
+  </path>
+
+  <pathconvert targetos="unix"
+	       property="bnfc.stem.dir"
+	       refid="bnfc.stem.path"> 
+    <chainedmapper>
+      <flattenmapper/>
+      <filtermapper>
+	<replacestring from="." to="/"/>
+      </filtermapper>
+    </chainedmapper>
+  </pathconvert>
+
+  <target name="generate-haskell">
+    <exec executable="BNFC"
+	  failonerror="true"
+	  logerror="true"
+	  dir="${bnfc.dir}/haskell">
+      <arg value="-m" />
+      <arg value="${bnfc.artifact}.cf" />
+    </exec>
+  </target>
+  <target name="build-haskell">
+    <exec executable="make"
+	  failonerror="true"
+	  logerror="true"
+	  dir="${bnfc.dir}/haskell"/>
+  </target>
+  <target name="clean-haskell">
+    <exec executable="make"
+	  failonerror="true"
+	  logerror="true"
+	  dir="${bnfc.dir}/haskell">
+      <arg value="clean" />
+    </exec>
+  </target>
+  <target name="generate-java">
+    <exec executable="BNFC"
+	  failonerror="true"
+	  logerror="true"
+	  dir="${bnfc.dir}">
+      <arg value="-m" />
+      <arg value="-java1.5"/>
+      <arg value="-p" />
+      <arg value="${bnfc.package}.model" />
+      <arg value="${bnfc.artifact}.cf" />
+    </exec>
+  </target>
+  <target name="build-java">
+    <exec executable="make"
+	  failonerror="true"
+	  logerror="true"
+	  dir="${bnfc.dir}">
+      <arg value="JAVAC_FLAGS=-sourcepath . -cp $$$DEVTOOLS/java-cup-11a-runtime.jar:$$$DEVTOOLS/java-cup-11a.jar:$$$DEVTOOLS/JFlex/lib:$$$DEVTOOLS/jaxb/lib" />
+      <arg value="JAVA_FLAGS=-cp $$$DEVTOOLS/java-cup-11a-runtime.jar:$$$DEVTOOLS/java-cup-11a.jar:$$$DEVTOOLS/JLex.jar:$$$DEVTOOLS/JFlex/lib:$$$DEVTOOLS/jaxb/lib"/>
+      <arg value="all" />
+    </exec>
+  </target>
+  <target name="clean-java">
+    <exec executable="make"
+	  failonerror="true"
+	  logerror="true"
+	  dir="${bnfc.dir}">
+      <arg value="clean" />
+    </exec>
+  </target>
+  <target name="haskell-home">
+    <mkdir dir="${bnfc.dir}/haskell"/>
+    <copy file="${bnfc.dir}/${bnfc.artifact}.cf"
+	  todir="${bnfc.dir}/haskell"/>
+  </target>
+  <target name="java-parser"
+	  depends="generate-java,build-java,clean-java">    
+  </target>
+  <target name="haskell-parser"
+	  depends="haskell-home,generate-haskell,build-haskell,clean-haskell">    
+  </target>
+  <target name="generate-doc-xhtml"
+	  depends="haskell-parser">
+    <exec executable="txt2tags"
+	  failonerror="true"
+	  logerror="true"
+	  dir="${bnfc.dir}/haskell">
+      <arg value="-t" />
+      <arg value="xhtml" />
+      <arg value="Doc${bnfc.artifact}.txt" />
+    </exec>
+    <copy file="${bnfc.dir}/haskell/Doc${bnfc.artifact}.xhtml"
+	  todir="${bnfc.dir}"/>
+  </target>  
+  <target name="bnfc-all"
+	  depends="java-parser,generate-doc-xhtml">
+  </target>
+  <target name="bnfc-deploy"
+	  depends="bnfc-all">
+    <!-- The ant documentation claims that this task does nothing if dir
+	 already exists -->
+    <mkdir dir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}"/>
+    <mkdir dir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}.bak"/>
+
+    <copy todir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}.bak"
+	failonerror="false">
+      <fileset dir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}"/>
+    </copy>
+    
+    <copy todir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}">
+      <fileset dir="${bnfc.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}" />
+    </copy>
+  </target>
+  <target name="bnfc-clean">
+    <delete failonerror="false">
+      <fileset dir="${bnfc.dir}" includes="**/*.xhtml"/>
+      <fileset dir="${bnfc.dir}" includes="**/*.dvi"/>
+      <fileset dir="${bnfc.dir}" includes="**/*.tex"/>           
+    </delete>
+    <delete dir="${bnfc.dir}/com" failonerror="false" />
+    <delete dir="${bnfc.dir}/haskell" failonerror="false"/>       
+    <delete file="${bnfc.dir}/Makefile" failonerror="false"/>
+  </target>
+</project>
