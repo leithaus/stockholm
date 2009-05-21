@@ -115,6 +115,11 @@ trait Ophelia {
 	member.getType // BUGBUG lgm should make copy
       }
     def trgtRenderMethodName : String = "render"
+
+    def resourceIsConcrete : Boolean = {
+      !( ModifierSet.isAbstract( resourceModelDecl.getModifiers ) )
+    }
+
     def resourceModelDecl : TypeDeclaration = {
       srcCompilationUnit.getTypes.get(0)
     }
@@ -529,25 +534,28 @@ trait Ophelia {
        });
 	cUnit
     }
-    def createSQLizedModelResource() : CompilationUnit = {
-      val ( cUnit, typ ) =
-	addSQLResourceClass(
-	  trgtImportDecls(
-	    addSQLPackage(
-	      trgtCompilationUnit
+    def createSQLizedModelResource() : Option[CompilationUnit] = {
+      if (resourceIsConcrete) {
+	val ( cUnit, typ ) =
+	  addSQLResourceClass(
+	    trgtImportDecls(
+	      addSQLPackage(
+		trgtCompilationUnit
+	      )
 	    )
-	  )
-	);
-      addSQLResourceModelContentMembers(
-	addSQLRemovers(
-	  addSQLSetters(
-	    addSQLGetters(
-	      addSQLIdAccessors(
-	      addSQLResourceCtor(
-		addSQLResourceCtxtFields( cUnit, typ ),
-		typ ), typ), typ ), typ ), typ ), typ);
-
-      cUnit
+	  );
+	addSQLResourceModelContentMembers(
+	  addSQLRemovers(
+	    addSQLSetters(
+	      addSQLGetters(
+		addSQLIdAccessors(
+		  addSQLResourceCtor(
+		    addSQLResourceCtxtFields( cUnit, typ ),
+		    typ ), typ), typ ), typ ), typ ), typ);
+	
+	Some( cUnit )
+      }
+      else None
     }
   }
   def transformSources(
@@ -555,12 +563,12 @@ trait Ophelia {
     dirLocation : String,
     fileLocations : List[String]
   )
-  : List[CompilationUnit] = {
+  : List[Option[CompilationUnit]] = {
     for ( loc <- fileLocations )
     yield SourceTransformer( dirLocation + loc, dbName ).createSQLizedModelResource()
   }
   def transformSourcesDir( dbName : String, location : String ) 
-  : List[CompilationUnit] = {
+  : List[Option[CompilationUnit]] = {
     transformSources(
       dbName,
       location,
@@ -583,29 +591,31 @@ trait Ophelia {
     if (!( trgtFile ).exists) {
       trgtFile.mkdirs()
     }
-    for ( cUnit <- transformSourcesDir( dbName, srcLocation ) )
+    for ( mcUnit <- transformSourcesDir( dbName, srcLocation ) )
       yield {
-	try {
-	  val fileName : String = trgtLocation + trgtResourceClassName( cUnit ) + ".java";
-	  //println( "acquiring writer for " + fileName );
-          val out : java.io.BufferedWriter =
-	    new java.io.BufferedWriter(
-	      new java.io.FileWriter(
-		fileName
-	      )
-	    );
-	  //println( "acquired writer for " + fileName );
-	  //println( "writing " + fileName + " with " + cUnit.toString);
-	  System.out.println( "writing " + fileName + "\n" );
-          out.write( cUnit.toString );
-	  //println( "wrote " + fileName );
-	  out.flush();
-	  //println( "flushing " + fileName );
-          out.close();
-	  //println( "closing " + fileName );
-	} catch
-	{
-	  case e => e.printStackTrace( System.err )
+	mcUnit match {
+	  case Some( cUnit ) => {
+	    try {
+	      val fileName : String = trgtLocation + trgtResourceClassName( cUnit ) + ".java";
+              val out : java.io.BufferedWriter =
+		new java.io.BufferedWriter(
+		  new java.io.FileWriter(
+		    fileName
+		  )
+		);
+	      
+	      System.out.println( "writing " + fileName + "\n" );
+              out.write( cUnit.toString );
+	      out.flush();
+              out.close();
+	    } catch
+	    {
+	      case e => e.printStackTrace( System.err )
+	    }
+	  }
+	  case None => {
+	    System.out.println( "skipping an abstract class " + "\n" );
+	  }
 	}
       }
   }
