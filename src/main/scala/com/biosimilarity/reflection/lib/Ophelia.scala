@@ -19,24 +19,12 @@ import java.io.FileInputStream
 
 trait Ophelia {
   case class SourceTransformer(
+    projectName : String,
     location : String,
     store : String
   ) {
     val _trgtPackageDependencies : List[String] =
       List(
-	"com.biosimilarity.reflection.model",
-	"com.sun.jersey.api.NotFoundException",
-	"javax.ws.rs.DELETE",
-	"javax.ws.rs.GET",
-	"javax.ws.rs.PUT",
-	"javax.ws.rs.Produces",
-	"javax.ws.rs.QueryParam",
-	"javax.ws.rs.Path",
-	"javax.ws.rs.PathParam",
-	"javax.ws.rs.core.Context",
-	"javax.ws.rs.core.Request",
-	"javax.ws.rs.core.Response",
-	"javax.ws.rs.core.UriInfo",
 	"javax.persistence.CascadeType",
 	"javax.persistence.Column",
 	"javax.persistence.Entity",
@@ -51,6 +39,11 @@ trait Ophelia {
 	"java.util.Iterator",
 	"java.net.URI"	
 	)
+
+    def trgtPackageDependencies : List[String] = {
+      _trgtPackageDependencies 
+    }
+
     var _srcCompilationUnit : Option[CompilationUnit] = None
     var _trgtCompilationUnit : Option[CompilationUnit] = None
     
@@ -64,7 +57,7 @@ trait Ophelia {
     def srcPackageName : String = {
       srcCompilationUnit.getPackage.getName.toString
     }
-    def trgtPackageSuffix : String = ".resources"
+    def trgtPackageSuffix : String = ".persistence.sql"
     def trgtPackageName : String = {
       srcPackageName + trgtPackageSuffix
     }
@@ -197,7 +190,7 @@ trait Ophelia {
     : CompilationUnit = {
       val importDecls : java.util.List[ImportDeclaration] =
 	(new java.util.LinkedList[ImportDeclaration]() /:
-	 (_trgtPackageDependencies ::: List( srcPackageName + ".*", trgtPackageName + ".*" )))(
+	 (trgtPackageDependencies ::: List( srcPackageName + ".*", trgtPackageName + ".*" )))(
 	  { (acc : java.util.LinkedList[ImportDeclaration], pkgName : String) =>
 	    acc.add(
 	      new ImportDeclaration(
@@ -305,6 +298,12 @@ trait Ophelia {
       typ : ClassOrInterfaceDeclaration
     )
     : CompilationUnit = {
+      def getFirstId( fd : FieldDeclaration ) : VariableDeclaratorId = {
+	(scala.collection.jcl.Conversions.convertList(
+	  fd.getVariables
+	  ))( 0 ).getId
+      }
+
       val ctor : ConstructorDeclaration =
 	new ConstructorDeclaration( 
 	  ModifierSet.PUBLIC,
@@ -321,7 +320,13 @@ trait Ophelia {
       ASTHelper.addStmt( block, callModel );      
       
       ctor.setParameters( new java.util.LinkedList[Parameter]() )
-      for ( mparam <- resourceModelMinimalCtorParams )
+      for (
+	fieldDecl <- getContainedFields;
+	mparam = new Parameter(
+	  fieldDecl.getType,
+	  getFirstId( fieldDecl )
+	)
+      )
 	yield {
 	  ctor.getParameters.add( mparam );
 	  callModel.getArgs.add(
@@ -333,6 +338,111 @@ trait Ophelia {
       ctor.setBlock( block );
       cUnit
     }
+
+    def addColumnAnnotations(
+      methodDecl : MethodDeclaration,
+      fieldDecl : FieldDeclaration,
+      nameStem : String,
+      annotations : java.util.LinkedList[AnnotationExpr]
+      ) : MethodDeclaration = {
+	val cPairs = new java.util.LinkedList[MemberValuePair]();
+	val columnAnnotation : NormalAnnotationExpr =
+	  new NormalAnnotationExpr(
+	    null,
+	    cPairs
+	  );
+	// BUGBUG -- LGM might not be this kind of type
+	val ftypName =
+	  fieldDecl.getType match {
+	    case rType : ReferenceType => {
+	      rType.getType.asInstanceOf[ClassOrInterfaceType].getName
+	    }
+	    case cOIType : ClassOrInterfaceType => {
+	      cOIType.getName
+	    }
+	    case _ => {
+	      throw new Exception( "class type not yet handled" )
+	    }
+	  };
+
+	if ( (ftypName.length > 4)
+	    && (ftypName.substring( 0, 4 ) == "List") ) {
+	  val cascadeType : ArrayInitializerExpr =
+	    new ArrayInitializerExpr(
+	      new java.util.LinkedList[Expression]()
+	    );
+	  cascadeType.getValues().add( 
+	    new FieldAccessExpr(
+	      new NameExpr( "CascadeType" ),
+	      "ALL"
+	    )
+	  );
+	  cPairs.add(
+	    new MemberValuePair(
+	      "cascade",
+	      cascadeType
+	    )
+	  );
+	  cPairs.add(
+	    new MemberValuePair(
+	      "fetch",
+	      new FieldAccessExpr(
+		new NameExpr( "FetchType" ),
+		"LAZY"
+	      )
+	    )
+	  );
+	  cPairs.add(
+	    new MemberValuePair(
+	      "mappedBy",
+	      new StringLiteralExpr( trgtResourceClassName )
+	    )
+	  );
+	  columnAnnotation.setName(
+	    ASTHelper.createNameExpr( "OneToMany" )
+	  );
+	}
+	else {
+	      cPairs.add(
+		new MemberValuePair(
+		  "name",
+		  new StringLiteralExpr( nameStem )
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "unique",
+		  new BooleanLiteralExpr( false )
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "nullable",
+		  new BooleanLiteralExpr( true )
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "insertable",
+		  new BooleanLiteralExpr( true )
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "updatable",
+		  new BooleanLiteralExpr( true )
+		)
+	      );
+	      columnAnnotation.setName(
+		ASTHelper.createNameExpr( "Column" )
+	      );
+	}
+	
+	annotations.add( columnAnnotation );
+	methodDecl.setAnnotations( annotations );
+	
+	methodDecl
+      }
 
     def addSQLIdAccessors(
       cUnit : CompilationUnit,
@@ -353,7 +463,54 @@ trait Ophelia {
 	);
       val retStmt : ReturnStmt =
 	new ReturnStmt( fieldAccessExpr );      
+      
+      val annotations = new java.util.LinkedList[AnnotationExpr]();
+      annotations.add( 
+	new MarkerAnnotationExpr(
+ 	  ASTHelper.createNameExpr( "Id" )
+ 	)
+      );
+      val cPairs = new java.util.LinkedList[MemberValuePair]();
+      cPairs.add(
+	new MemberValuePair(
+	  "name",
+	  new StringLiteralExpr( trgtUniqueIdFldName )
+	)
+      );
+      cPairs.add(
+	new MemberValuePair(
+	  "unique",
+	  new BooleanLiteralExpr( true )
+	)
+      );
+      cPairs.add(
+	new MemberValuePair(
+	  "nullable",
+	  new BooleanLiteralExpr( false )
+	)
+      );
+      cPairs.add(
+	new MemberValuePair(
+	  "insertable",
+	  new BooleanLiteralExpr( true )
+	)
+      );
+      cPairs.add(
+	new MemberValuePair(
+	  "updatable",
+	  new BooleanLiteralExpr( true )
+	)
+      );
 
+      val columnAnnotation : NormalAnnotationExpr =
+	new NormalAnnotationExpr(
+	  ASTHelper.createNameExpr( "Column" ),
+	  cPairs
+	);
+
+      annotations.add( columnAnnotation );
+      getMethod.setAnnotations( annotations );
+            
       val setMethod : MethodDeclaration =
 	new MethodDeclaration(
 	  ModifierSet.PUBLIC,
@@ -410,20 +567,24 @@ trait Ophelia {
       // Nothing to do for now
       cUnit
     }
+
+    def getContainedFields : Seq[FieldDeclaration] = {
+      for (member <-
+	   scala.collection.jcl.Conversions.convertList(
+	     srcCompilationUnit.getTypes.get(0).getMembers
+	   ) if (member.isInstanceOf[FieldDeclaration]
+		 //&& (ModifierSet.isPublic( member.getMembers ))
+		 //&& (ModifierSet.isFinal( member.getMembers ))
+	       ))
+      yield member.asInstanceOf[FieldDeclaration]
+    }
+
     def addSQLResourceModelContentMembers(
       cUnit : CompilationUnit,
       typ : ClassOrInterfaceDeclaration
       ) : CompilationUnit = {
       val containedFields : Seq[FieldDeclaration]
-      =
-	(for (member <-
-	     scala.collection.jcl.Conversions.convertList(
-	       srcCompilationUnit.getTypes.get(0).getMembers
-	       ) if (member.isInstanceOf[FieldDeclaration]
-		     //&& (ModifierSet.isPublic( member.getMembers ))
-		     //&& (ModifierSet.isFinal( member.getMembers ))
-		   ))
-	  yield member.asInstanceOf[FieldDeclaration]);
+	= getContainedFields;
 
 	// fold annotatedMethods into resource class
 	( typ /: containedFields )({
@@ -445,8 +606,8 @@ trait Ophelia {
 		 )
 	      );
 	    val accessBlock : BlockStmt = new BlockStmt();
-	    val accessCallModel : MethodCallExpr =	      
-	      new MethodCallExpr(
+	    val accessCallModel : FieldAccessExpr =	      
+	      new FieldAccessExpr(
 		new ThisExpr(),
 		nameStem
 	      );
@@ -460,11 +621,8 @@ trait Ophelia {
 		 )
 	      );
 	    val updateBlock : BlockStmt = new BlockStmt();
-	    val updateCallModel : MethodCallExpr =	      
-	      new MethodCallExpr(
-		new ThisExpr(),
-		nameStem
-	      );
+	    val updateCallModel : FieldAccessExpr =	      
+	      new FieldAccessExpr( new ThisExpr(), nameStem );
 	    val updateExpr : AssignExpr =
 	      new AssignExpr(
 		updateCallModel,
@@ -472,47 +630,12 @@ trait Ophelia {
 		AssignExpr.Operator.assign
 		);	    
 
-	    accessMethod.setAnnotations(
+	    addColumnAnnotations(
+	      accessMethod,
+	      member,
+	      nameStem,
 	      new java.util.LinkedList[AnnotationExpr]()
-	    );
-	    val columnAnnotation : NormalAnnotationExpr =
-	      new NormalAnnotationExpr(
-		ASTHelper.createNameExpr( "Column" ),
-		new java.util.LinkedList[MemberValuePair]()
 	      );
-	    accessMethod.getAnnotations.add(
-	      columnAnnotation
-	    );
-	    columnAnnotation.getPairs().add(
-	      new MemberValuePair(
-		"name",
-		new StringLiteralExpr( nameStem )
-	      )
-	    );
-	    columnAnnotation.getPairs().add(
-	      new MemberValuePair(
-		"unique",
-		new BooleanLiteralExpr( false )
-	      )
-	    );
-	    columnAnnotation.getPairs().add(
-	      new MemberValuePair(
-		"nullable",
-		new BooleanLiteralExpr( true )
-	      )
-	    );
-	    columnAnnotation.getPairs().add(
-	      new MemberValuePair(
-		"insertable",
-		new BooleanLiteralExpr( true )
-	      )
-	    );
-	    columnAnnotation.getPairs().add(
-	      new MemberValuePair(
-		"updatable",
-		new BooleanLiteralExpr( true )
-	      )
-	    );
 
 	    accessMethod.setBody( accessBlock );
 	    ASTHelper.addStmt(
@@ -559,17 +682,23 @@ trait Ophelia {
     }
   }
   def transformSources(
+    projectName : String,
     dbName : String,
     dirLocation : String,
     fileLocations : List[String]
   )
   : List[Option[CompilationUnit]] = {
     for ( loc <- fileLocations )
-    yield SourceTransformer( dirLocation + loc, dbName ).createSQLizedModelResource()
+    yield SourceTransformer( projectName, dirLocation + loc, dbName ).createSQLizedModelResource()
   }
-  def transformSourcesDir( dbName : String, location : String ) 
+  def transformSourcesDir(
+    projectName : String,
+    dbName : String,
+    location : String
+  ) 
   : List[Option[CompilationUnit]] = {
     transformSources(
+      projectName,
       dbName,
       location,
       (for ( fileName <- new java.io.File( location ).list if
@@ -582,6 +711,7 @@ trait Ophelia {
       cUnit.getTypes.get(0).getName
     }
   def generateSQLizedResourceClassFiles(
+    projectName : String,
     dbName : String,
     srcLocation : String,
     trgtLocation : String
@@ -591,7 +721,7 @@ trait Ophelia {
     if (!( trgtFile ).exists) {
       trgtFile.mkdirs()
     }
-    for ( mcUnit <- transformSourcesDir( dbName, srcLocation ) )
+    for ( mcUnit <- transformSourcesDir( projectName, dbName, srcLocation ) )
       yield {
 	mcUnit match {
 	  case Some( cUnit ) => {
@@ -620,13 +750,21 @@ trait Ophelia {
       }
   }
   def generateSQLizedResources(
+    projectName : String,
     dbName : String,
     srcLocation : String
     ) : Unit = {
+      val slashEndedSrcLoc = {
+	val l = srcLocation.length;
+	if ( srcLocation.substring( l-1, l ) == "/" )
+	  srcLocation
+	else (srcLocation + "/");
+      }
       generateSQLizedResourceClassFiles(
+	projectName,
 	dbName,
-	srcLocation,
-	srcLocation + "resources/"
+	slashEndedSrcLoc,
+	slashEndedSrcLoc + "persistence/sql/"
 	)
     }
 }
