@@ -734,7 +734,7 @@ trait Ophelia {
 		  )
 		);
 	      
-	      System.out.println( "writing " + fileName + "\n" );
+	      System.out.println( "<writing>" + fileName + "</writing>\n" );
               out.write( cUnit.toString );
 	      out.flush();
               out.close();
@@ -744,7 +744,7 @@ trait Ophelia {
 	    }
 	  }
 	  case None => {
-	    System.out.println( "skipping an abstract class " + "\n" );
+	    System.out.println( "<skipping>abstract class" + "</skipping>\n" );
 	  }
 	}
       }
@@ -754,20 +754,104 @@ trait Ophelia {
     dbName : String,
     srcLocation : String
     ) : Unit = {
+      println( "<SQLGeneration>" );
       val slashEndedSrcLoc = {
 	val l = srcLocation.length;
 	if ( srcLocation.substring( l-1, l ) == "/" )
 	  srcLocation
 	else (srcLocation + "/");
       }
+
+      println( "<sourceDirectory>" + slashEndedSrcLoc + "</sourceDirectory>" );
+      println( "<projectName>" + projectName + "</projectName>" );
+      println( "<storeName>" + dbName + "</storeName>" );
+
       generateSQLizedResourceClassFiles(
 	projectName,
 	dbName,
 	slashEndedSrcLoc,
 	slashEndedSrcLoc + "persistence/sql/"
 	)
+      println( "</SQLGeneration>" );
     }
 }
 
 object theOphelia extends Ophelia {
+  def printUsage = {
+    println( "ophelia <configOpt>" );
+    println( " where <configOpt> ::= " );
+    println( "     --groupId <groupId>" );
+    println( "     --projectName <projName>" );
+    println( "     --storeName <storeName>" );
+    println( "     --srcLocation <srcLocation>" );
+  }
+  
+  def argMap( args: Array[String] )
+  : Option[scala.collection.mutable.HashMap[String,String]] = {
+    if ( (args.length > 0) && (args.length % 2 == 0) ) {
+      val argMap =
+	new scala.collection.mutable.HashMap[String,String]();      
+      val range = (0 to ((args.length / 2) - 1) );
+      for ( idx <- range.force ) yield {
+	val kv = Tuple( args( idx*2 ), args( idx*2 + 1 ) );
+	argMap + kv
+      };
+      Some( argMap )
+    }
+    else None
+  }
+
+  def main(args: Array[String]) {    
+    argMap( args ) match {
+      case Some( map ) => {
+	println("Ophelia initiated with " + map);
+	try {
+	  map.get( "--projectName" ) match {
+	    case Some( projName ) => {
+	      map.get( "--groupId" ) match {
+		case Some( groupId ) => {
+		  map.get( "--storeName" ) match {
+		    case Some( storeName ) => {
+		      map.get( "--srcLocation" ) match {
+			case Some( srcLocation ) => {
+			  generateSQLizedResources(
+			    projName,
+			    storeName,
+			    (srcLocation
+			     + "/"
+			     + groupId.replace( ".", "/" )
+			     + "/"
+			     + "model"
+			     + "/"
+			     + projName
+			     + "/"
+			     + "Absyn")
+			    )
+			}
+			case None =>
+			  throw new Exception( "srcLocation not specified" )
+		      }
+		    }
+		    case None =>
+		      throw new Exception( "store name not specified" )
+		  }
+		}
+		case None =>
+		  throw new Exception( "groupId not specified" )
+	      }
+	    }
+	    case None =>
+	      throw new Exception( "project name not specified" )
+	  }
+	}
+	catch {
+	  case e => {
+	    println( e.getMessage )
+	    printUsage
+	  }
+	}
+      }
+      case None => printUsage
+    }
+  }
 }

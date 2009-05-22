@@ -2,6 +2,12 @@
 <project name="BNFC" xmlns:ac="antlib:net.sf.antcontrib"
 	 default="help" basedir=".">
 
+<!--   <taskdef name="schemagen" classname="com.sun.tools.jxc.SchemaGenTask"> -->
+<!--     <classpath> -->
+<!--       <fileset dir="/Users/lgm/.m2/repository/com/sun/xml/jaxb-xjc/2.0EA3/" includes="*.jar" /> -->
+<!--     </classpath> -->
+<!--   </taskdef> -->
+
   <!-- ****************** Properties ********************* -->
   <property name="bnfc.dir" value="${basedir}"/>
   <property name="scala.dir" value="${bnfc.dir}/../scala"/>
@@ -88,6 +94,14 @@
       <arg value="${bnfc.artifact}.cf" />
     </exec>
   </target>
+  <!-- <target name="bnfc-generate-xsd"> -->
+<!--     <mkdir -->
+<!-- 	dir="${target.dir}/generated-schema/${bnfc.stem.dir}/model/${bnfc.artifact}"/> -->
+<!--     <schemagen -->
+<!-- 	srcdir="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}/Absyn" -->
+<!-- 	destdir="${target.dir}/generated-schema/${bnfc.stem.dir}/model/${bnfc.artifact}" -->
+<!-- 	classpath="${compile_classpath}"/> -->
+<!--     </target> -->
   <target name="build-java">
     <echo message="classpath according to maven: ${compile_classpath}"/>
     <exec executable="make"
