@@ -17,7 +17,7 @@ import japa.parser.ast.`type`._
 
 import java.io.FileInputStream
 
-trait Ophelia {
+trait Desdemona {
   case class SourceTransformer(
     projectName : String,
     location : String,
@@ -776,7 +776,7 @@ trait Ophelia {
     }
 }
 
-object theOphelia extends Ophelia {
+object theDesdemona extends Desdemona {
   def printUsage = {
     println( "ophelia <configOpt>" );
     println( " where <configOpt> ::= " );
@@ -804,7 +804,7 @@ object theOphelia extends Ophelia {
   def main(args: Array[String]) {    
     argMap( args ) match {
       case Some( map ) => {
-	println("Ophelia initiated with " + map);
+	println("Desdemona initiated with " + map);
 	try {
 	  map.get( "--projectName" ) match {
 	    case Some( projName ) => {
