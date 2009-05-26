@@ -36,6 +36,11 @@
 	     type="dir">
   </available>
 
+  <available property="bnfc.generated.resources.available"
+	     file="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}"
+	     type="dir">
+  </available>
+
   <available property="bnfc.processed.sources.available"
 	     file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}"
 	     type="dir">
@@ -47,6 +52,14 @@
 	  if="bnfc.generated.sources.available">
     <uptodate property="bnfc.generated.sources.uptodate"
 	    targetfile="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}"
+	    srcfile="${bnfc.dir}/${bnfc.artifact}.cf">
+    </uptodate>
+  </target>
+
+  <target name="check-generated-resources"
+	  if="bnfc.generated.resources.available">
+    <uptodate property="bnfc.generated.resources.uptodate"
+	    targetfile="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}/Absyn/persistence/sql"
 	    srcfile="${bnfc.dir}/${bnfc.artifact}.cf">
     </uptodate>
   </target>
@@ -156,6 +169,29 @@
     <mkdir dir="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}"/>
     <copy todir="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}">
       <fileset dir="${bnfc.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}" />
+    </copy>
+  </target>
+  <target name="bnfc-generate-persistence"
+	  depends="check-generated-resources"
+	  unless="bnfc.generated.resources.uptodate">
+    <java classname="${bnfc.package}.lib.othello.theDesdemona">
+	 <arg value="--projectName"/>
+	 <arg value="${bnfc.artifact}"/>
+	 <arg value="--groupId"/>
+	 <arg value="${bnfc.package}"/>
+	 <arg value="--storeName"/>
+	 <arg value="${bnfc.artifact}_production"/>
+	 <arg value="--srcLocation"/>
+	 <arg value="${target.dir}/generated-sources"/>
+	 <classpath>
+           <pathelement path="${compile_classpath}"/>
+	   <pathelement location="${target.dir}/classes"/>
+         </classpath>
+    </java>
+    <mkdir
+	dir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/Absyn/persistence/sql"/>
+    <copy todir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/Absyn/persistence/sql">
+      <fileset dir="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}/Absyn/persistence/sql"/>
     </copy>
   </target>
   <target name="bnfc-process"

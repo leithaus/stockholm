@@ -68,6 +68,7 @@ trait Desdemona {
     def trgtStoreName : String = store
     def trgtTableName : String = resourceModelName + "_table"
     def trgtUniqueIdFldName : String = "uuid"
+    def trgtIdFldName : String = "id"
 
     def srcCompilationUnit : CompilationUnit = {
       _srcCompilationUnit match {
@@ -290,7 +291,14 @@ trait Desdemona {
 	  new ClassOrInterfaceType( "String" ),
 	  trgtUniqueIdFldName
 	);
+      val idField : FieldDeclaration =
+	ASTHelper.createFieldDeclaration(
+	  ModifierSet.PRIVATE,
+	  new ClassOrInterfaceType( "String" ),
+	  trgtIdFldName
+	);
       ASTHelper.addMember(typ, uuidField);
+      ASTHelper.addMember(typ, idField);
       cUnit
     }
     def addSQLResourceCtor(
@@ -303,6 +311,11 @@ trait Desdemona {
 	  fd.getVariables
 	  ))( 0 ).getId
       }
+      def getIds( fd : FieldDeclaration ) : Seq[VariableDeclaratorId] = {
+	(scala.collection.jcl.Conversions.convertList(
+	  fd.getVariables
+	  )).map( { ( v : VariableDeclarator ) => v.getId } )
+      }
 
       val ctor : ConstructorDeclaration =
 	new ConstructorDeclaration( 
@@ -311,10 +324,10 @@ trait Desdemona {
 	);
 
       val block : BlockStmt = new BlockStmt();
-      val callModel : MethodCallExpr =	      
-	new MethodCallExpr(
-	  new ThisExpr(),
-	  "super",
+      val callModel : ExplicitConstructorInvocationStmt =	      
+	new ExplicitConstructorInvocationStmt(
+	  false,
+	  null,
 	  new java.util.LinkedList[Expression]()
 	);      
       ASTHelper.addStmt( block, callModel );      
@@ -322,16 +335,22 @@ trait Desdemona {
       ctor.setParameters( new java.util.LinkedList[Parameter]() )
       for (
 	fieldDecl <- getContainedFields;
-	mparam = new Parameter(
-	  fieldDecl.getType,
-	  getFirstId( fieldDecl )
-	)
+	mparams =
+	  getIds( fieldDecl ).map({ ( id : VariableDeclaratorId ) =>
+	    new Parameter(
+	      fieldDecl.getType,
+	      id
+	    )
+	  })
       )
 	yield {
-	  ctor.getParameters.add( mparam );
-	  callModel.getArgs.add(
-	    new NameExpr( mparam.getId.toString )
-	  )
+	  mparams.map( { ( mparam : Parameter ) => {
+	    ctor.getParameters.add( mparam );
+	    callModel.getArgs.add(
+	      new NameExpr( mparam.getId.toString )
+	    )
+	  } 
+	 })
 	};
 
       ASTHelper.addMember( typ, ctor );
@@ -371,37 +390,50 @@ trait Desdemona {
 	    new ArrayInitializerExpr(
 	      new java.util.LinkedList[Expression]()
 	    );
-	  cascadeType.getValues().add( 
-	    new FieldAccessExpr(
-	      new NameExpr( "CascadeType" ),
-	      "ALL"
-	    )
-	  );
-	  cPairs.add(
-	    new MemberValuePair(
-	      "cascade",
-	      cascadeType
-	    )
-	  );
-	  cPairs.add(
-	    new MemberValuePair(
-	      "fetch",
-	      new FieldAccessExpr(
-		new NameExpr( "FetchType" ),
-		"LAZY"
-	      )
-	    )
-	  );
-	  cPairs.add(
-	    new MemberValuePair(
-	      "mappedBy",
-	      new StringLiteralExpr( trgtResourceClassName )
-	    )
-	  );
-	  columnAnnotation.setName(
-	    ASTHelper.createNameExpr( "OneToMany" )
-	  );
-	}
+	      cascadeType.getValues().add( 
+		new FieldAccessExpr(
+		  new NameExpr( "CascadeType" ),
+		  "ALL"
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "cascade",
+		  cascadeType
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "fetch",
+		  new FieldAccessExpr(
+		    new NameExpr( "FetchType" ),
+		    "LAZY"
+		  )
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "mappedBy",
+		  new StringLiteralExpr(
+		    (trgtResourceClassName.substring( 0, 1 ).toLowerCase
+		     + trgtResourceClassName.substring(
+		       1,
+		       trgtResourceClassName.length ))
+		  )
+		)
+	      );
+	      cPairs.add(
+		new MemberValuePair(
+		  "targetEntity",
+		  new NameExpr(
+		    ftypName.substring( 4, ftypName.length ) + ".class"
+		  )
+		)
+	      );
+	      columnAnnotation.setName(
+		ASTHelper.createNameExpr( "OneToMany" )
+	      );
+	    }
 	else {
 	      cPairs.add(
 		new MemberValuePair(
@@ -444,15 +476,25 @@ trait Desdemona {
 	methodDecl
       }
 
-    def addSQLIdAccessors(
+    def camelBackAccessor( propName : String, accessor : String ) : String = {
+      (accessor
+       + propName.substring( 0, 1 ).toUpperCase
+       + propName.substring( 1, propName.length )
+       )
+    }
+
+    def addAccessorMethod(
+      propType : String,
+      propName : String,
+      isId : Boolean,
       cUnit : CompilationUnit,
       typ : ClassOrInterfaceDeclaration
     ) : CompilationUnit = {
       val getMethod : MethodDeclaration =
 	new MethodDeclaration(
 	  ModifierSet.PUBLIC,
-	  new ClassOrInterfaceType( "String" ),
-	  "uuid"
+	  new ClassOrInterfaceType( propType ),
+	  camelBackAccessor( propName, "get" )
 	);
       
       val getBlock : BlockStmt = new BlockStmt();
@@ -465,16 +507,18 @@ trait Desdemona {
 	new ReturnStmt( fieldAccessExpr );      
       
       val annotations = new java.util.LinkedList[AnnotationExpr]();
-      annotations.add( 
-	new MarkerAnnotationExpr(
- 	  ASTHelper.createNameExpr( "Id" )
- 	)
-      );
+      if (isId) {
+	annotations.add( 
+	  new MarkerAnnotationExpr(
+ 	    ASTHelper.createNameExpr( "Id" )
+ 	  )
+	);
+      }
       val cPairs = new java.util.LinkedList[MemberValuePair]();
       cPairs.add(
 	new MemberValuePair(
 	  "name",
-	  new StringLiteralExpr( trgtUniqueIdFldName )
+	  new StringLiteralExpr( propName )
 	)
       );
       cPairs.add(
@@ -510,16 +554,19 @@ trait Desdemona {
 
       annotations.add( columnAnnotation );
       getMethod.setAnnotations( annotations );
-            
+      ASTHelper.addMember( typ, getMethod );      
+      getMethod.setBody( getBlock );
+      ASTHelper.addStmt( getBlock, retStmt );      
+
       val setMethod : MethodDeclaration =
 	new MethodDeclaration(
 	  ModifierSet.PUBLIC,
 	  ASTHelper.VOID_TYPE,
-	  "uuid"
+	  camelBackAccessor( propName, "set" )
 	);
       val paramModel : Parameter =
 	ASTHelper.createParameter(
-	  new ClassOrInterfaceType( "String" ),
+	  new ClassOrInterfaceType( propType ),
 	  "id"
 	);
       
@@ -530,17 +577,23 @@ trait Desdemona {
 	  new NameExpr( "id" ),
 	  AssignExpr.Operator.assign
 	  );                 
-
-      ASTHelper.addMember( typ, getMethod );      
-      getMethod.setBody( getBlock );
-      ASTHelper.addStmt( getBlock, retStmt );
-
+      
       ASTHelper.addMember( typ, setMethod );      
       setMethod.setParameters( new java.util.LinkedList[Parameter]() );
       setMethod.getParameters.add( paramModel );
       setMethod.setBody( setBlock );
-      ASTHelper.addStmt( setBlock, assignExpr );
+      ASTHelper.addStmt( setBlock, assignExpr );      
 
+      cUnit
+    }
+
+    def addSQLIdAccessors(
+      cUnit : CompilationUnit,
+      typ : ClassOrInterfaceDeclaration
+    ) : CompilationUnit = {
+      addAccessorMethod( "String", trgtUniqueIdFldName, false, cUnit, typ );
+      addAccessorMethod( "String", trgtIdFldName, true, cUnit, typ );
+      
       cUnit
     }
 
@@ -600,10 +653,7 @@ trait Desdemona {
 	      new MethodDeclaration(
 		ModifierSet.PUBLIC,
 		trgtRenderType( cUnit, typ, member ), 
-		("get"
-		 + nameStem.substring( 0, 1 ).toUpperCase
-		 + nameStem.substring( 1, nameStem.length )
-		 )
+		camelBackAccessor( nameStem, "get" )
 	      );
 	    val accessBlock : BlockStmt = new BlockStmt();
 	    val accessCallModel : FieldAccessExpr =	      
@@ -611,24 +661,6 @@ trait Desdemona {
 		new ThisExpr(),
 		nameStem
 	      );
-	    val updateMethod : MethodDeclaration =
-	      new MethodDeclaration(
-		ModifierSet.PUBLIC,
-		trgtRenderType( cUnit, typ, member ), 
-		("set"
-		 + nameStem.substring( 0, 1 ).toUpperCase
-		 + nameStem.substring( 1, nameStem.length )
-		 )
-	      );
-	    val updateBlock : BlockStmt = new BlockStmt();
-	    val updateCallModel : FieldAccessExpr =	      
-	      new FieldAccessExpr( new ThisExpr(), nameStem );
-	    val updateExpr : AssignExpr =
-	      new AssignExpr(
-		updateCallModel,
-		new NameExpr( nameStem ),
-		AssignExpr.Operator.assign
-		);	    
 
 	    addColumnAnnotations(
 	      accessMethod,
@@ -642,15 +674,33 @@ trait Desdemona {
 	      accessBlock,
 	      new ReturnStmt( accessCallModel )
 	    );
+	    
+	    if (!ModifierSet.isFinal( member.getModifiers )) {
+	      val updateMethod : MethodDeclaration =
+		new MethodDeclaration(
+		  ModifierSet.PUBLIC,
+		  trgtRenderType( cUnit, typ, member ), 
+		  camelBackAccessor( nameStem, "set" )
+		);
+	      val updateBlock : BlockStmt = new BlockStmt();
+	      val updateCallModel : FieldAccessExpr =	      
+		new FieldAccessExpr( new ThisExpr(), nameStem );
+	      val updateExpr : AssignExpr =
+		new AssignExpr(
+		  updateCallModel,
+		  new NameExpr( nameStem ),
+		  AssignExpr.Operator.assign
+		);	    
+	      updateMethod.setBody( updateBlock );
+	      ASTHelper.addStmt(
+		updateBlock,
+		updateExpr
+	      );
 
-	    updateMethod.setBody( updateBlock );
-	    ASTHelper.addStmt(
-	      updateBlock,
-	      updateExpr
-	    );
+	      ASTHelper.addMember( typ, updateMethod );
+	    }
 
-	    ASTHelper.addMember( typ, accessMethod );
-	    ASTHelper.addMember( typ, updateMethod );
+	    ASTHelper.addMember( typ, accessMethod );	    
 	    
 	    typ
 	  }
@@ -777,6 +827,13 @@ trait Desdemona {
 }
 
 object theDesdemona extends Desdemona {
+  def makeST(
+    projectName : String,
+    location : String,
+    store : String
+  ) : SourceTransformer = {
+    new SourceTransformer( projectName, location, store )
+  }
   def printUsage = {
     println( "ophelia <configOpt>" );
     println( " where <configOpt> ::= " );

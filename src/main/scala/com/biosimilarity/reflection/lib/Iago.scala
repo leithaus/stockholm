@@ -6,7 +6,7 @@
 // Description: 
 // ------------------------------------------------------------------------
 
-package com.sap.dspace.othello;    
+package com.biosimilarity.reflection.lib.othello;    
 
 import japa.parser._
 import japa.parser.ast._

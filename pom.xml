@@ -45,6 +45,16 @@
       <name>Grumblesmurf</name>
       <url>http://maven.grumblesmurf.org/</url>
     </pluginRepository>
+    <pluginRepository>
+    <id>Codehaus Snapshots</id>
+    <url>http://snapshots.repository.codehaus.org/</url>
+    <snapshots>
+      <enabled>true</enabled>
+    </snapshots>
+    <releases>
+      <enabled>false</enabled>
+    </releases>
+  </pluginRepository>
   </pluginRepositories>
 
   <dependencies>
@@ -151,6 +161,23 @@
       <artifactId>jaxb-xjc</artifactId>
       <version>2.0EA3</version>
     </dependency> 
+    <dependency>
+      <groupId>org.hibernate</groupId>
+      <artifactId>hibernate-entitymanager</artifactId>
+      <version>3.3.2.GA</version>
+      <exclusions>
+	<exclusion>
+	  <groupId>javax.transaction</groupId>
+	  <artifactId>jta</artifactId>
+	</exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>geronimo-spec</groupId>
+      <artifactId>geronimo-spec-jta</artifactId>
+      <version>1.0.1B-rc4</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -181,8 +208,8 @@
 	  <displayCmd>true</displayCmd>
 	  <launchers>
 	    <launcher>
-	      <id>Ophelia</id>
-	      <mainClass>com.biosimilarity.reflection.lib.othello.theOphelia</mainClass>
+	      <id>Desdemona</id>
+	      <mainClass>com.biosimilarity.reflection.lib.othello.theDesdemona</mainClass>
 	      <!-- args are optional -->
 	      <args>
 		<arg>--projectName</arg>
@@ -248,10 +275,7 @@
       </plugin>
       <plugin>
 	<groupId>org.apache.maven.plugins</groupId>
-	<!-- groupId>org.jvnet.maven-antrun-extended-plugin</groupId -->
 	<artifactId>maven-antrun-plugin</artifactId>
-	<!-- artifactId>maven-antrun-extended-plugin</artifactId -->
-	<!-- version>1.8</version -->
 	<executions>
 	  <execution>
 	    <id>bnfc-generation</id>
@@ -285,6 +309,7 @@
 	    <phase>process-sources</phase>
 	    <configuration>
 	      <tasks>
+		<property name="base.dir" value="${basedir}"/>
 		<property name="target.dir" value="${basedir}/target"/>
 		<property name="scala.dir" value="${basedir}/src/main/scala"/>
 		<property name="bnfc.dir" value="${basedir}/src/main/bnfc"/>
@@ -292,6 +317,28 @@
 		<property name="bnfc.artifact" value="${artifactId}"/>
                 <ant antfile="${basedir}/src/main/bnfc/build.xml">
                   <target name="bnfc-process"/>
+                </ant>
+              </tasks>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+	  <execution>
+	    <id>bnfc-persistence</id>
+	    <phase>process-classes</phase>
+	    <configuration>
+	      <tasks>
+		<property name="base.dir" value="${basedir}"/>
+		<property name="target.dir" value="${basedir}/target"/>
+		<property name="scala.dir" value="${basedir}/src/main/scala"/>
+		<property name="bnfc.dir" value="${basedir}/src/main/bnfc"/>
+		<property name="bnfc.package" value="${groupId}"/>
+		<property name="bnfc.artifact" value="${artifactId}"/>
+		<property name="compile_classpath"
+			  refid="maven.compile.classpath"/>
+                <ant antfile="${basedir}/src/main/bnfc/build.xml">
+                  <target name="bnfc-generate-persistence"/>
                 </ant>
               </tasks>
             </configuration>
@@ -337,6 +384,39 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>hibernate3-maven-plugin</artifactId>
+      <version>2.0-alpha-2</version>
+      <executions>
+        <execution>
+          <phase>process-classes</phase>
+          <goals>
+            <goal>hbm2ddl</goal>
+          </goals>
+        </execution>
+      </executions>
+      <configuration>
+	<configurationfile>hibernate.cfg.xml</configurationfile>
+	<persistenceunit>stockholm</persistenceunit>
+	<propertyfile>stockholm.db.properties</propertyfile>
+        <components>
+          <component>
+            <name>hbm2ddl</name>
+            <implementation>annotationconfiguration</implementation>
+          </component>
+        </components>
+        <componentProperties>
+          <implementation>jpaconfiguration</implementation>
+          <persistenceunit>stockholm</persistenceunit>
+          <outputfilename>schema.ddl</outputfilename>
+          <drop>false</drop>
+          <create>true</create>
+          <export>false</export>
+          <format>true</format>
+        </componentProperties>
+      </configuration>
+    </plugin>
     </plugins>
   </build>
   <reporting>
