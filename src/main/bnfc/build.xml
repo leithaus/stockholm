@@ -224,8 +224,45 @@
       <fileset dir="${bnfc.dir}" includes="**/*.xhtml"/>
       <fileset dir="${bnfc.dir}" includes="**/*.dvi"/>
       <fileset dir="${bnfc.dir}" includes="**/*.tex"/>           
-      <fileset dir="${bnfc.dir}" includes="**/*.bak"/>           
+      <fileset dir="${bnfc.dir}" includes="**/*.bak"/>                 
     </delete>
+    <delete dir="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/Absyn" />
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/AbstractVisitor.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/AllVisitor.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/ComposVisitor.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/FoldVisitor.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/PrettyPrinter.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/Test.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/VisitSkel.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/Yylex.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/parser.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/sym.java"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/Yylex"
+	/>
+    <delete
+	file="${scala.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}/${bnfc.artifact}.cup"
+	/>
     <delete dir="${bnfc.dir}/com" failonerror="false" />
     <delete dir="${bnfc.dir}/haskell" failonerror="false"/>       
     <delete file="${bnfc.dir}/Makefile" failonerror="false"/>
