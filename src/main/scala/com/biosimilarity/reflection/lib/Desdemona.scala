@@ -455,7 +455,7 @@ trait Desdemona {
 	ASTHelper.createFieldDeclaration(
 	  ModifierSet.PRIVATE,
 	  new ClassOrInterfaceType( "String" ),
-	  trgtIdFldName
+	  trgtIdFldName + "Dummy"
 	);
 	idField.setAnnotations(
 	  new java.util.LinkedList[AnnotationExpr]()
