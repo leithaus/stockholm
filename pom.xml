@@ -178,6 +178,16 @@
       <version>1.0.1B-rc4</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>com.sdicons.jsontools</groupId>
+      <artifactId>jsontools-core</artifactId>
+      <version>1.7</version>
+    </dependency> 
+    <dependency>
+      <groupId>com.rabbitmq</groupId>
+      <artifactId>rabbitmq-client</artifactId>
+      <version>1.3.0</version>
+    </dependency>
   </dependencies>
 
   <build>

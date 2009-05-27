@@ -14,6 +14,7 @@ import japa.parser.ast.body._
 import japa.parser.ast.stmt._
 import japa.parser.ast.expr._
 import japa.parser.ast.`type`._
+import japa.parser.ast.visitor._
 
 import java.io.FileInputStream
 
@@ -33,9 +34,13 @@ trait Desdemona {
 	"javax.persistence.OneToMany",
 	"javax.persistence.Table",
 	"javax.persistence.UniqueConstraint",	
+	"javax.persistence.MappedSuperclass",	
+	"javax.persistence.Inheritance",	
+	"javax.persistence.InheritanceType",	
 	"java.util.Date",
 	"java.util.HashSet",
 	"java.util.Set",
+	"java.util.List",
 	"java.util.Iterator",
 	"java.net.URI"	
 	)
@@ -105,8 +110,35 @@ trait Desdemona {
       typ : ClassOrInterfaceDeclaration,
       member : FieldDeclaration
       ) : Type = {
-	//new ClassOrInterfaceType( "String" )
-	member.getType // BUGBUG lgm should make copy
+	val ftypName =
+	  member.getType match {
+	    case rType : ReferenceType => {
+	      rType.getType.asInstanceOf[ClassOrInterfaceType].getName
+	    }
+	    case cOIType : ClassOrInterfaceType => {
+	      cOIType.getName
+	    }
+	    case _ => {
+	      throw new Exception( "class type not yet handled" )
+	    }
+	  };
+		 
+	if ( (ftypName.length > 4)
+	    && (ftypName.substring( 0, 4 ) == "List") ) {
+	      val theTypeParamStr : String =
+		ftypName.substring( 4, ftypName.length );
+	      val theTypeParamType : ClassOrInterfaceType =
+		new ClassOrInterfaceType( theTypeParamStr );
+	      val theType : ClassOrInterfaceType =
+		new ClassOrInterfaceType( "List" );
+	      theType.setTypeArgs( new java.util.LinkedList[Type]() );
+	      theType.getTypeArgs.add( theTypeParamType  )
+	      theType
+	    }
+	else {
+	  // BUGBUG lgm should make copy
+	  member.getType
+	}
       }
     def trgtRenderMethodName : String = "render"
 
@@ -191,7 +223,8 @@ trait Desdemona {
     : CompilationUnit = {
       val importDecls : java.util.List[ImportDeclaration] =
 	(new java.util.LinkedList[ImportDeclaration]() /:
-	 (trgtPackageDependencies ::: List( srcPackageName + ".*", trgtPackageName + ".*" )))(
+	 //(trgtPackageDependencies ::: List( srcPackageName + ".*", trgtPackageName + ".*" ))
+	 (trgtPackageDependencies ::: List( trgtPackageName + ".*" )))(
 	  { (acc : java.util.LinkedList[ImportDeclaration], pkgName : String) =>
 	    acc.add(
 	      new ImportDeclaration(
@@ -217,66 +250,227 @@ trait Desdemona {
       );
       cUnit
     }
+
+    def makeScope( spath : String ) : ClassOrInterfaceType = {
+      val root :: path = spath.split( "\\." ).toList;
+      ( new ClassOrInterfaceType( root ) /: path )( {
+	( acc : ClassOrInterfaceType, name : String ) => {
+	  new ClassOrInterfaceType( acc, name )
+	}
+      } )
+    }
+
+    def resourceScope : ClassOrInterfaceType = {
+      makeScope( srcPackageName )
+    }
+
+    class PackageCorrectionVisitor
+    extends VoidVisitorAdapter[scala.collection.mutable.Map[String,String]] {      
+      override def visit(
+	param : Parameter,
+	arg : scala.collection.mutable.Map[String,String]
+	) = {
+	  param.getType match {
+	    case cOrIType : ClassOrInterfaceType =>
+	      visit(
+		param.getType.asInstanceOf[ClassOrInterfaceType],
+		arg
+	      )
+	    case refType : ReferenceType =>
+	      visit(
+		param.getType.asInstanceOf[ReferenceType],
+		arg
+	      )
+	  }	      
+        }
+
+      override def visit(
+	cOrIType : ClassOrInterfaceType,
+	arg : scala.collection.mutable.Map[String,String]
+	) = {
+	  var scope = cOrIType.getScope;
+	  if (scope != null) {
+	    if (scope.toString == srcPackageName) {
+		cOrIType.setScope(
+		  new ClassOrInterfaceType( 
+		    new ClassOrInterfaceType( 
+		      scope,
+		      "persistence"
+		    ),
+		    "sql"
+		  )
+		)
+	    }
+	    else {
+	      visit( scope, arg )
+	    }
+	  }
+        }
+      override def visit(
+	refType : ReferenceType,
+	arg : scala.collection.mutable.Map[String,String]
+	) = {
+	  val cOrIType : ClassOrInterfaceType =
+	    refType.getType.asInstanceOf[ClassOrInterfaceType];
+	  visit( cOrIType, arg )
+	}
+    }
+
+    var _packageCorrectionVisitor : Option[PackageCorrectionVisitor] =
+      None
+    def packageCorrectionVisitor : PackageCorrectionVisitor = {
+      _packageCorrectionVisitor match {
+	case Some( pcv ) => pcv
+	case None => {
+	  val pcv = new PackageCorrectionVisitor()
+	  _packageCorrectionVisitor = Some( pcv )
+	  pcv
+	}
+      }
+    }
+    var _packageMap : Option[scala.collection.mutable.Map[String,String]] 
+    = None
+    def packageMap : scala.collection.mutable.Map[String,String] = {
+      _packageMap match {
+	case Some( pkgm ) => pkgm
+	case None => {
+	  val pkgm =
+	    new scala.collection.mutable.HashMap[String,String]();
+	  _packageMap = Some( pkgm )
+	  pkgm
+	}
+      }
+    }
+
+    def correctMemberPackageReferences(
+      typ : ClassOrInterfaceDeclaration
+    )
+    : ClassOrInterfaceDeclaration = {
+      packageCorrectionVisitor.visit( typ, packageMap );
+      typ
+    }
+
     def addSQLResourceClass( cUnit : CompilationUnit )
     : ( CompilationUnit, ClassOrInterfaceDeclaration ) = {
-      val typ : ClassOrInterfaceDeclaration =
-	new ClassOrInterfaceDeclaration(
-	  ModifierSet.PUBLIC,
-	  false,
-	  trgtResourceClassName
-	);
+      val typ : ClassOrInterfaceDeclaration = resourceModelDecl.asInstanceOf[ClassOrInterfaceDeclaration]
+	// new ClassOrInterfaceDeclaration(
+// 	  ModifierSet.PUBLIC,
+// 	  false,
+// 	  trgtResourceClassName
+// 	);
       ASTHelper.addTypeDeclaration( cUnit, typ );
-      typ.setAnnotations( new java.util.LinkedList[AnnotationExpr]() );
-      typ.getAnnotations.add(
-	new MarkerAnnotationExpr(
-	  ASTHelper.createNameExpr( "Entity" )
-	)
-      );
-      val tableAnnotationDecl : NormalAnnotationExpr =
-	new NormalAnnotationExpr(
-	  ASTHelper.createNameExpr( "Table" ),
-	  new java.util.LinkedList[MemberValuePair]()
-	);
-      tableAnnotationDecl.getPairs().add(
-	new MemberValuePair(
-	  "name", 
-	  new StringLiteralExpr( trgtTableName )
-	)
-      );
-      tableAnnotationDecl.getPairs().add(
-	new MemberValuePair(
-	  "catalog", 
-	  new StringLiteralExpr( trgtStoreName )
-	)
-      );
-      val uniqueConstraintsDecl : ArrayInitializerExpr =
-	new ArrayInitializerExpr(
-	  new java.util.LinkedList[Expression]()
-	);
-      val constraint : NormalAnnotationExpr =
-	new NormalAnnotationExpr(
-	  new NameExpr( "UniqueConstraint" ),
-	  new java.util.LinkedList[MemberValuePair]()
-	);
-      
-      constraint.getPairs().add(
-	new MemberValuePair( 
-	  "columnNames",
-	  new StringLiteralExpr( trgtUniqueIdFldName )
+      if ((resourceIsConcrete) && (!isCollectionType( typ ))) {	
+	typ.setAnnotations( new java.util.LinkedList[AnnotationExpr]() );
+	typ.getAnnotations.add(
+	  new MarkerAnnotationExpr(
+	    ASTHelper.createNameExpr( "Entity" )
 	  )
 	);
 
-      uniqueConstraintsDecl.getValues().add( constraint );
-      
-      tableAnnotationDecl.getPairs().add(
-	new MemberValuePair(
-	  "uniqueConstraints",
-	  uniqueConstraintsDecl
+	val inheritanceAnnotationDecl : NormalAnnotationExpr =
+	  new NormalAnnotationExpr(
+	    ASTHelper.createNameExpr( "Inheritance" ),
+	    new java.util.LinkedList[MemberValuePair]()
+	  );
+	inheritanceAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "strategy", 
+	    new NameExpr(
+	      "InheritanceType.TABLE_PER_CLASS"
+	    )
+	  )
+	);
+	typ.getAnnotations.add( inheritanceAnnotationDecl );
+	
+	val tableAnnotationDecl : NormalAnnotationExpr =
+	  new NormalAnnotationExpr(
+	    ASTHelper.createNameExpr( "Table" ),
+	    new java.util.LinkedList[MemberValuePair]()
+	  );
+	tableAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "name", 
+	    new StringLiteralExpr( trgtTableName )
+	  )
+	);
+	tableAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "catalog", 
+	    new StringLiteralExpr( trgtStoreName )
+	  )
+	);
+	val uniqueConstraintsDecl : ArrayInitializerExpr =
+	  new ArrayInitializerExpr(
+	    new java.util.LinkedList[Expression]()
+	  );
+	val constraint : NormalAnnotationExpr =
+	  new NormalAnnotationExpr(
+	    new NameExpr( "UniqueConstraint" ),
+	    new java.util.LinkedList[MemberValuePair]()
+	  );
+	
+	constraint.getPairs().add(
+	  new MemberValuePair( 
+	    "columnNames",
+	    new StringLiteralExpr( trgtUniqueIdFldName )
+	  )
+	);
+	
+	uniqueConstraintsDecl.getValues().add( constraint );
+	
+	tableAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "uniqueConstraints",
+	    uniqueConstraintsDecl
+	  )
+	);
+	typ.getAnnotations.add( tableAnnotationDecl );
+	//typ.setExtends( new java.util.LinkedList[ClassOrInterfaceType]() );
+	//typ.getExtends.add( trgtRootClass );      
+      }
+      else if (!resourceIsConcrete) {
+	typ.setAnnotations( new java.util.LinkedList[AnnotationExpr]() );
+	typ.getAnnotations.add(
+	  new MarkerAnnotationExpr(
+	    //ASTHelper.createNameExpr( "MappedSuperclass" )
+	    ASTHelper.createNameExpr( "Entity" )
+	  )
+	);
+	val inheritanceAnnotationDecl : NormalAnnotationExpr =
+	  new NormalAnnotationExpr(
+	    ASTHelper.createNameExpr( "Inheritance" ),
+	    new java.util.LinkedList[MemberValuePair]()
+	  );
+	inheritanceAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "strategy", 
+	    new NameExpr(
+	      "InheritanceType.TABLE_PER_CLASS"
+	    )
+	  )
+	);
+	typ.getAnnotations.add( inheritanceAnnotationDecl );
+
+	val idField : FieldDeclaration =
+	ASTHelper.createFieldDeclaration(
+	  ModifierSet.PRIVATE,
+	  new ClassOrInterfaceType( "String" ),
+	  trgtIdFldName
+	);
+	idField.setAnnotations(
+	  new java.util.LinkedList[AnnotationExpr]()
+	);
+	idField.getAnnotations.add(
+	  new MarkerAnnotationExpr(
+	    ASTHelper.createNameExpr( "Id" )
+	  )
 	)
-      );
-      typ.getAnnotations.add( tableAnnotationDecl );
-      typ.setExtends( new java.util.LinkedList[ClassOrInterfaceType]() );
-      typ.getExtends.add( trgtRootClass );      
+
+	ASTHelper.addMember(typ, idField);
+	
+      }
+
+      correctMemberPackageReferences( typ );
       
       (	cUnit, typ )
     }
@@ -306,56 +500,64 @@ trait Desdemona {
       typ : ClassOrInterfaceDeclaration
     )
     : CompilationUnit = {
-      def getFirstId( fd : FieldDeclaration ) : VariableDeclaratorId = {
-	(scala.collection.jcl.Conversions.convertList(
-	  fd.getVariables
-	  ))( 0 ).getId
-      }
-      def getIds( fd : FieldDeclaration ) : Seq[VariableDeclaratorId] = {
-	(scala.collection.jcl.Conversions.convertList(
-	  fd.getVariables
-	  )).map( { ( v : VariableDeclarator ) => v.getId } )
-      }
+      // def getFirstId( fd : FieldDeclaration ) : VariableDeclaratorId = {
+// 	(scala.collection.jcl.Conversions.convertList(
+// 	  fd.getVariables
+// 	  ))( 0 ).getId
+//       }
+//       def getIds( fd : FieldDeclaration ) : Seq[VariableDeclaratorId] = {
+// 	(scala.collection.jcl.Conversions.convertList(
+// 	  fd.getVariables
+// 	  )).map( { ( v : VariableDeclarator ) => v.getId } )
+//       }
 
-      val ctor : ConstructorDeclaration =
-	new ConstructorDeclaration( 
-	  ModifierSet.PUBLIC,
-	  trgtResourceClassName
-	);
+//       val ctor : ConstructorDeclaration =
+// 	new ConstructorDeclaration( 
+// 	  ModifierSet.PUBLIC,
+// 	  //trgtResourceClassName
+// 	  typ.getName
+// 	);
 
-      val block : BlockStmt = new BlockStmt();
-      val callModel : ExplicitConstructorInvocationStmt =	      
-	new ExplicitConstructorInvocationStmt(
-	  false,
-	  null,
-	  new java.util.LinkedList[Expression]()
-	);      
-      ASTHelper.addStmt( block, callModel );      
+//       val block : BlockStmt = new BlockStmt();
+//       val callModel : ExplicitConstructorInvocationStmt =	      
+// 	new ExplicitConstructorInvocationStmt(
+// 	  false,
+// 	  null,
+// 	  new java.util.LinkedList[Expression]()
+// 	);      
+//       ASTHelper.addStmt( block, callModel );      
       
-      ctor.setParameters( new java.util.LinkedList[Parameter]() )
-      for (
-	fieldDecl <- getContainedFields;
-	mparams =
-	  getIds( fieldDecl ).map({ ( id : VariableDeclaratorId ) =>
-	    new Parameter(
-	      fieldDecl.getType,
-	      id
-	    )
-	  })
-      )
-	yield {
-	  mparams.map( { ( mparam : Parameter ) => {
-	    ctor.getParameters.add( mparam );
-	    callModel.getArgs.add(
-	      new NameExpr( mparam.getId.toString )
-	    )
-	  } 
-	 })
-	};
+//       ctor.setParameters( new java.util.LinkedList[Parameter]() )
+//       for (
+// 	fieldDecl <- getContainedFields;
+// 	mparams =
+// 	  getIds( fieldDecl ).map({ ( id : VariableDeclaratorId ) =>
+// 	    new Parameter(
+// 	      fieldDecl.getType,
+// 	      id
+// 	    )
+// 	  })
+//       )
+// 	yield {
+// 	  mparams.map( { ( mparam : Parameter ) => {
+// 	    ctor.getParameters.add( mparam );
+// 	    callModel.getArgs.add(
+// 	      new NameExpr( mparam.getId.toString )
+// 	    )
+// 	  } 
+// 	 })
+// 	};
 
-      ASTHelper.addMember( typ, ctor );
-      ctor.setBlock( block );
+//       ASTHelper.addMember( typ, ctor );
+//       ctor.setBlock( block );
       cUnit
+    }
+
+    def isCollectionType( typ : TypeDeclaration ) : Boolean = {
+      val ftypName = typ.getName;
+      
+      ((ftypName.length > 4)
+       && (ftypName.substring( 0, 4 ) == "List") ) 
     }
 
     def addColumnAnnotations(
@@ -422,14 +624,14 @@ trait Desdemona {
 		  )
 		)
 	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "targetEntity",
-		  new NameExpr(
-		    ftypName.substring( 4, ftypName.length ) + ".class"
-		  )
-		)
-	      );
+	      // cPairs.add(
+// 		new MemberValuePair(
+// 		  "targetEntity",
+// 		  new NameExpr(
+// 		    ftypName.substring( 4, ftypName.length ) + ".class"
+// 		  )
+// 		)
+// 	      );
 	      columnAnnotation.setName(
 		ASTHelper.createNameExpr( "OneToMany" )
 	      );
@@ -468,6 +670,14 @@ trait Desdemona {
 	      columnAnnotation.setName(
 		ASTHelper.createNameExpr( "Column" )
 	      );
+
+	  if (nameStem == trgtIdFldName) {
+	    annotations.add(
+	      new MarkerAnnotationExpr(
+		ASTHelper.createNameExpr( "Id" )
+		)
+	    )
+	  }
 	}
 	
 	annotations.add( columnAnnotation );
@@ -591,8 +801,8 @@ trait Desdemona {
       cUnit : CompilationUnit,
       typ : ClassOrInterfaceDeclaration
     ) : CompilationUnit = {
-      addAccessorMethod( "String", trgtUniqueIdFldName, false, cUnit, typ );
-      addAccessorMethod( "String", trgtIdFldName, true, cUnit, typ );
+      //addAccessorMethod( "String", trgtUniqueIdFldName, false, cUnit, typ );
+      //addAccessorMethod( "String", trgtIdFldName, true, cUnit, typ );
       
       cUnit
     }
@@ -636,6 +846,67 @@ trait Desdemona {
       cUnit : CompilationUnit,
       typ : ClassOrInterfaceDeclaration
       ) : CompilationUnit = {
+
+	def addFieldAccessMethods(
+	  acc : ClassOrInterfaceDeclaration,
+	  member : FieldDeclaration,
+	  v : VariableDeclarator
+	) = {
+	  val nameStem : String = v.getId.getName;
+	  val accessMethod : MethodDeclaration =
+	    new MethodDeclaration(
+	      ModifierSet.PUBLIC,
+	      trgtRenderType( cUnit, typ, member ), 
+	      camelBackAccessor( nameStem, "get" )
+	    );
+	  val accessBlock : BlockStmt = new BlockStmt();
+	  val accessCallModel : FieldAccessExpr =	      
+	    new FieldAccessExpr(
+	      new ThisExpr(),
+	      nameStem
+	    );
+	  
+	  addColumnAnnotations(
+	    accessMethod,
+	    member,
+	    nameStem,
+	    new java.util.LinkedList[AnnotationExpr]()
+	  );
+	  
+	  accessMethod.setBody( accessBlock );
+	  ASTHelper.addStmt(
+	    accessBlock,
+	    new ReturnStmt( accessCallModel )
+	  );
+	  
+	  if (!ModifierSet.isFinal( member.getModifiers )) {
+	    val updateMethod : MethodDeclaration =
+	      new MethodDeclaration(
+		ModifierSet.PUBLIC,
+		ASTHelper.VOID_TYPE, 
+		camelBackAccessor( nameStem, "set" )
+	      );
+	    val updateBlock : BlockStmt = new BlockStmt();
+	    val updateCallModel : FieldAccessExpr =	      
+	      new FieldAccessExpr( new ThisExpr(), nameStem );
+	    val updateExpr : AssignExpr =
+	      new AssignExpr(
+		updateCallModel,
+		new NameExpr( nameStem ),
+		AssignExpr.Operator.assign
+	      );	    
+	    updateMethod.setBody( updateBlock );
+	    ASTHelper.addStmt(
+	      updateBlock,
+	      updateExpr
+	    );
+	    
+	    ASTHelper.addMember( typ, updateMethod );
+	  }
+	  
+	  ASTHelper.addMember( typ, accessMethod );	    	    
+	}
+
       val containedFields : Seq[FieldDeclaration]
 	= getContainedFields;
 
@@ -643,80 +914,30 @@ trait Desdemona {
 	( typ /: containedFields )({
 	  ( acc : ClassOrInterfaceDeclaration,
 	    member : FieldDeclaration )
-	  =>
-	  {
-	    val nameStem : String =
-	      (scala.collection.jcl.Conversions.convertList(
-		member.getVariables
-	      ))( 0 ).getId.getName;
-	    val accessMethod : MethodDeclaration =
-	      new MethodDeclaration(
-		ModifierSet.PUBLIC,
-		trgtRenderType( cUnit, typ, member ), 
-		camelBackAccessor( nameStem, "get" )
-	      );
-	    val accessBlock : BlockStmt = new BlockStmt();
-	    val accessCallModel : FieldAccessExpr =	      
-	      new FieldAccessExpr(
-		new ThisExpr(),
-		nameStem
-	      );
-
-	    addColumnAnnotations(
-	      accessMethod,
-	      member,
-	      nameStem,
-	      new java.util.LinkedList[AnnotationExpr]()
-	      );
-
-	    accessMethod.setBody( accessBlock );
-	    ASTHelper.addStmt(
-	      accessBlock,
-	      new ReturnStmt( accessCallModel )
-	    );
-	    
-	    if (!ModifierSet.isFinal( member.getModifiers )) {
-	      val updateMethod : MethodDeclaration =
-		new MethodDeclaration(
-		  ModifierSet.PUBLIC,
-		  trgtRenderType( cUnit, typ, member ), 
-		  camelBackAccessor( nameStem, "set" )
-		);
-	      val updateBlock : BlockStmt = new BlockStmt();
-	      val updateCallModel : FieldAccessExpr =	      
-		new FieldAccessExpr( new ThisExpr(), nameStem );
-	      val updateExpr : AssignExpr =
-		new AssignExpr(
-		  updateCallModel,
-		  new NameExpr( nameStem ),
-		  AssignExpr.Operator.assign
-		);	    
-	      updateMethod.setBody( updateBlock );
-	      ASTHelper.addStmt(
-		updateBlock,
-		updateExpr
-	      );
-
-	      ASTHelper.addMember( typ, updateMethod );
-	    }
-
-	    ASTHelper.addMember( typ, accessMethod );	    
-	    
+	  => {
+	    scala.collection.jcl.Conversions.convertList(
+	      member.getVariables
+	      ).map( { 
+	      ( v : VariableDeclarator ) => {
+		addFieldAccessMethods( acc, member, v )
+	      }
+	    } );
 	    typ
 	  }
        });
 	cUnit
     }
     def createSQLizedModelResource() : Option[CompilationUnit] = {
-      if (resourceIsConcrete) {
-	val ( cUnit, typ ) =
-	  addSQLResourceClass(
-	    trgtImportDecls(
-	      addSQLPackage(
-		trgtCompilationUnit
-	      )
+      val ( cUnit, typ ) =
+	addSQLResourceClass(
+	  trgtImportDecls(
+	    addSQLPackage(
+	      trgtCompilationUnit
 	    )
-	  );
+	  )
+	);
+
+      if ((resourceIsConcrete) && !(isCollectionType( typ ))) {
 	addSQLResourceModelContentMembers(
 	  addSQLRemovers(
 	    addSQLSetters(
@@ -724,11 +945,10 @@ trait Desdemona {
 		addSQLIdAccessors(
 		  addSQLResourceCtor(
 		    addSQLResourceCtxtFields( cUnit, typ ),
-		    typ ), typ), typ ), typ ), typ ), typ);
-	
-	Some( cUnit )
+		    typ ), typ), typ ), typ ), typ ), typ)
       }
-      else None
+	
+      Some( cUnit )
     }
   }
   def transformSources(
@@ -835,7 +1055,7 @@ object theDesdemona extends Desdemona {
     new SourceTransformer( projectName, location, store )
   }
   def printUsage = {
-    println( "ophelia <configOpt>" );
+    println( "desdemona <configOpt>" );
     println( " where <configOpt> ::= " );
     println( "     --groupId <groupId>" );
     println( "     --projectName <projName>" );
@@ -903,7 +1123,8 @@ object theDesdemona extends Desdemona {
 	}
 	catch {
 	  case e => {
-	    println( e.getMessage )
+	    //println( e.getMessage )
+	    e.printStackTrace
 	    printUsage
 	  }
 	}
