@@ -14,11 +14,31 @@ import Absyn._
 import Eval._
 import Compile._
 
+import net.liftweb.amqp._
+
 import scala.collection.immutable.HashMap
+
+import com.thoughtworks.xstream.XStream
+import com.thoughtworks.xstream.io.json.JettisonMappedXmlDriver
 
 import java.io.StringReader
 
 class REPL {
+  // messaging
+  var _jsonQueueCnxn : Option[BasicJSONAMQPSender] = None
+  def jsonQueueCnxn() : BasicJSONAMQPSender = {
+    _jsonQueueCnxn match {
+      case Some( jqc ) => jqc
+      case None => {
+	val jqc = new BasicJSONAMQPSender()
+	_jsonQueueCnxn = Some( jqc )
+	jqc
+      }
+    }
+  }
+  def send( contents : java.lang.Object ) : Unit = {
+    jsonQueueCnxn.send( contents )
+  }
   // parsing
   def lexer (str : String) = new Yylex( new StringReader( str ) )
   def parser (str : String) = new parser( lexer( str ) )
@@ -84,6 +104,11 @@ class REPL {
   }
 
   // printing
+  def showClientMessageRequest (str : String) = {
+    val parseTree = clientRequestParseTree(str);
+    send( parseTree )
+    new XStream( new JettisonMappedXmlDriver() ).toXML( parseTree )
+  }
   def showClientRequestParseTree (str : String) =
     PrettyPrinter.show(clientRequestParseTree(str))  
   def showClientRequestEvaluation (str : String) =

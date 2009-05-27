@@ -41,6 +41,10 @@ class REPLForm {
 	    Text(
 	      ("type " + theREPL.showClientRequestParseTree(paramStr).toString) )
 	  }
+	  case JsonCmd( "enqueue", _, paramStr :  String, _ ) => {
+	    Text(
+	      ("queuing " + theREPL.showClientMessageRequest(paramStr).toString) )
+	  }
 	}
       )
     }
