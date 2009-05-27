@@ -1,0 +1,14 @@
+<persistence>
+   <persistence-unit name="stockholm" transaction-type="RESOURCE_LOCAL">
+      <properties>
+         <property name="hibernate.dialect" value="org.hibernate.dialect.MySQLDialect"/>
+         <property name="hibernate.connection.driver_class" value="com.mysql.jdbc.Driver"/>
+         <property name="hibernate.connection.url" value="jdbc:mysql://localhost/rlambda_production"/>
+         <property name="hibernate.max_fetch_depth" value="3"/>
+         <property name="hibernate.show_sql" value="true" />
+         <property name="hibernate.hbm2ddl.auto" value="update" />
+	 <property name="hibernate.connection.username" value="root"/>
+	 <property name="hibernate.connection.password" value="phr3dnj0rg3"/>
+      </properties>
+   </persistence-unit>
+</persistence>
