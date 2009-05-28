@@ -8,6 +8,7 @@
 
 package net.liftweb.amqp
 
+import _root_.com.eaio.uuid.UUID
 import _root_.com.rabbitmq.client._
 import _root_.scala.actors.Actor
 import _root_.java.io.ObjectInputStream
@@ -52,6 +53,7 @@ trait JSONHandler {
 }
 
 trait JSONToSQLHandler {
+  self : IdSupplier =>
   var _emf : Option[EntityManagerFactory] = None
   def entityMgrFactory( db : String ) : EntityManagerFactory = {
     _emf match {
@@ -80,7 +82,13 @@ trait JSONToSQLHandler {
       obj = 
 	new XStream(
 	  new JettisonMappedXmlDriver()
-	).fromXML( contents );
+	).fromXML(
+	  contents.replace(
+	    "Absyn", "Absyn.persistence.sql"
+	  )
+	);
+
+      generateIds( obj );
       
       try {
 	entityManager( db ).getTransaction().begin();
@@ -151,9 +159,48 @@ class JSONAMQPListener {
   amqp.start
 
   // JSON Listener
-  class JSONListener( logging : Boolean )
+  class JSONListener(
+    logging : Boolean,
+    rcrs    : Boolean,
+    fOUT    : Boolean
+  )
   extends Actor
-  with JSONToSQLHandler {
+  with JSONToSQLHandler
+  with IdSupplier {
+    // ID Generation
+    override def recurse() = rcrs
+    override def hasDepth( pojo : java.lang.Object ) : Boolean = {
+      altHasDepth( pojo )
+    }
+    override def failOnUnknownType() = fOUT
+    
+    override def stdAction() : Action = {
+      ( subject : ActedOn ) => {
+	if (reallyHasSetId( subject ))
+	  reallyCallSetId(
+	    subject,
+	    getNextId()
+	  );
+	for (field <- subject.getClass.getDeclaredFields
+	     if (field.getName.contains( "idSuper" )
+	       || field.getName.contains( "uuid" )))
+	yield {
+	  // reflectively break java access control mechanisms
+	  val accessible = field.isAccessible;
+	  field.setAccessible( true );
+
+	  field.set( subject, getNextId() )
+    
+	  // put java access mechanisms back in place
+	  field.setAccessible( accessible );    
+	}
+      }
+    }
+
+    override def getNextId() = {
+      new UUID() + ""
+    }
+
     def act = {
       react {
 	case msg@AMQPMessage( contents : String ) => {
@@ -166,7 +213,10 @@ class JSONAMQPListener {
       }
     }
   }
-  val jsonListener = new JSONListener( true )
+
+  val jsonListener =
+    new JSONListener( true, true, false )
+
   jsonListener.start
-  amqp ! AMQPAddListener(jsonListener)
+  amqp ! AMQPAddListener( jsonListener )
 }

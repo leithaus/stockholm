@@ -35,8 +35,10 @@ trait Desdemona {
 	"javax.persistence.Table",
 	"javax.persistence.UniqueConstraint",	
 	"javax.persistence.MappedSuperclass",	
+	"javax.persistence.GeneratedValue",	
 	"javax.persistence.Inheritance",	
 	"javax.persistence.InheritanceType",	
+	"org.hibernate.annotations.GenericGenerator",
 	"java.util.Date",
 	"java.util.HashSet",
 	"java.util.Set",
@@ -455,7 +457,7 @@ trait Desdemona {
 	ASTHelper.createFieldDeclaration(
 	  ModifierSet.PRIVATE,
 	  new ClassOrInterfaceType( "String" ),
-	  trgtIdFldName + "Dummy"
+	  trgtIdFldName + "Super"
 	);
 	idField.setAnnotations(
 	  new java.util.LinkedList[AnnotationExpr]()
@@ -465,6 +467,31 @@ trait Desdemona {
 	    ASTHelper.createNameExpr( "Id" )
 	  )
 	)
+	// idField.getAnnotations.add(
+// 	  new MarkerAnnotationExpr(
+// 	    ASTHelper.createNameExpr( "GeneratedValue" )
+// 	  )
+// 	)
+// 	val generatorAnnotationDecl : NormalAnnotationExpr =
+// 	  new NormalAnnotationExpr(
+// 	    ASTHelper.createNameExpr( "GenericGenerator" ),
+// 	    new java.util.LinkedList[MemberValuePair]()
+// 	  );
+// 	generatorAnnotationDecl.getPairs().add(
+// 	  new MemberValuePair(
+// 	    "name", 
+// 	    new StringLiteralExpr( "hibernate-uuid" )
+// 	  )
+// 	);
+// 	generatorAnnotationDecl.getPairs().add(
+// 	  new MemberValuePair(
+// 	    "strategy", 
+// 	    new StringLiteralExpr( "uuid" )
+// 	  )
+// 	);
+// 	idField.getAnnotations.add( 
+// 	  generatorAnnotationDecl
+// 	);
 
 	ASTHelper.addMember(typ, idField);
 	
@@ -677,6 +704,11 @@ trait Desdemona {
 		ASTHelper.createNameExpr( "Id" )
 		)
 	    )
+	    // annotations.add(
+// 	      new MarkerAnnotationExpr(
+// 		ASTHelper.createNameExpr( "GeneratedValue" )
+// 	      )
+// 	    )
 	  }
 	}
 	
@@ -886,6 +918,11 @@ trait Desdemona {
 		ASTHelper.VOID_TYPE, 
 		camelBackAccessor( nameStem, "set" )
 	      );
+	    val updateParam : Parameter =
+	      ASTHelper.createParameter(
+		trgtRenderType( cUnit, typ, member ),
+		nameStem
+	      );
 	    val updateBlock : BlockStmt = new BlockStmt();
 	    val updateCallModel : FieldAccessExpr =	      
 	      new FieldAccessExpr( new ThisExpr(), nameStem );
@@ -900,6 +937,10 @@ trait Desdemona {
 	      updateBlock,
 	      updateExpr
 	    );
+	    updateMethod.setParameters(
+	      new java.util.LinkedList[Parameter]()
+	    );
+	    updateMethod.getParameters.add( updateParam );
 	    
 	    ASTHelper.addMember( typ, updateMethod );
 	  }
@@ -996,7 +1037,8 @@ trait Desdemona {
 	mcUnit match {
 	  case Some( cUnit ) => {
 	    try {
-	      val fileName : String = trgtLocation + trgtResourceClassName( cUnit ) + ".java";
+	      val fileName : String =
+		trgtLocation + trgtResourceClassName( cUnit ) + ".java";
               val out : java.io.BufferedWriter =
 		new java.io.BufferedWriter(
 		  new java.io.FileWriter(
@@ -1014,7 +1056,9 @@ trait Desdemona {
 	    }
 	  }
 	  case None => {
-	    System.out.println( "<skipping>abstract class" + "</skipping>\n" );
+	    System.out.println(
+	      ("<skipping>" + "abstract class" + "</skipping>\n")
+	    );
 	  }
 	}
       }

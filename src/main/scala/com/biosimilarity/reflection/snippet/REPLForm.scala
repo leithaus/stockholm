@@ -35,11 +35,11 @@ class REPLForm {
 	  }
 	  case JsonCmd( "evaluate", _, paramStr :  String, _ ) => {
 	    Text(
-	      ("evaluate " + theREPL.showClientRequestEvaluation(paramStr).toString) )
+	      ("evaluate " + "theREPL.showClientRequestEvaluation(paramStr).toString") )
 	  }
 	  case JsonCmd( "type", _, paramStr :  String, _ ) => {
 	    Text(
-	      ("type " + theREPL.showClientRequestParseTree(paramStr).toString) )
+	      ("type " + "theREPL.showClientRequestParseTree(paramStr).toString") )
 	  }
 	  case JsonCmd( "enqueue", _, paramStr :  String, _ ) => {
 	    Text(
