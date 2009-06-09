@@ -401,6 +401,58 @@
               <goal>run</goal>
             </goals>
           </execution>
+	  <execution>
+	    <id>bnfc-doc</id>
+	    <phase>generate-resources</phase>
+	    <configuration>
+	      <tasks>
+		<property name="base.dir" value="${basedir}"/>
+		<property name="target.dir" value="${basedir}/target"/>
+		<property name="scala.dir" value="${basedir}/src/main/scala"/>
+		<property name="bnfc.dir" value="${basedir}/src/main/bnfc"/>
+		<property name="bnfc.package" value="${groupId}"/>
+		<property name="bnfc.artifact" value="${artifactId}"/>
+		<property name="compile_classpath"
+			  refid="maven.compile.classpath"/>
+                <ant antfile="${basedir}/src/main/bnfc/build.xml">
+                  <target name="bnfc-generate-doc-xhtml"/>
+                </ant>
+              </tasks>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+	  <execution>
+	    <id>bnfc-deploy-doc</id>
+	    <phase>process-resources</phase>
+	    <configuration>
+	      <tasks>
+		<property name="base.dir"
+			  value="${basedir}"/>
+		<property name="target.dir"
+			  value="${basedir}/target"/>
+		<property name="scala.dir"
+			  value="${basedir}/src/main/scala"/>
+		<property name="scala.dir"
+			  value="${basedir}/src/main/webapp"/>
+		<property name="bnfc.dir"
+			  value="${basedir}/src/main/bnfc"/>
+		<property name="bnfc.package"
+			  value="${groupId}"/>
+		<property name="bnfc.artifact"
+			  value="${artifactId}"/>
+		<property name="compile_classpath"
+			  refid="maven.compile.classpath"/>
+                <ant antfile="${basedir}/src/main/bnfc/build.xml">
+                  <target name="bnfc-deploy-doc-xhtml"/>
+                </ant>
+              </tasks>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
 	  <!-- <execution> -->
 <!-- 	    <id>bnfc-xsd-processing</id> -->
 <!-- 	    <phase>process-sources</phase> -->

@@ -11,6 +11,7 @@
   <!-- ****************** Properties ********************* -->
   <property name="bnfc.dir" value="${basedir}"/>
   <property name="scala.dir" value="${bnfc.dir}/../scala"/>
+  <property name="webapp.dir" value="${bnfc.dir}/../webapp"/>
   <property name="target.dir" value="${bnfc.dir}/../../../target"/>
   <property name="bnfc.package" value="com.biosimilarity.reflection"/>
   <property name="bnfc.artifact" value="rlambda"/>
@@ -36,7 +37,17 @@
 	     type="dir">
   </available>
 
+  <available property="bnfc.generated.sources.haskell.available"
+	     file="${target.dir}/generated-sources/bnfc/haskell"
+	     type="dir">
+  </available>
+
   <available property="bnfc.generated.resources.available"
+	     file="${target.dir}/generated-resources/webapp"
+	     type="dir">
+  </available>
+
+  <available property="bnfc.generated.persistence.available"
 	     file="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}"
 	     type="dir">
   </available>
@@ -56,9 +67,25 @@
     </uptodate>
   </target>
 
+  <target name="check-generated-haskell-sources"
+	  if="bnfc.generated.sources.haskell.available">
+    <uptodate property="bnfc.generated.sources.haskell.uptodate"
+	    targetfile="${target.dir}/generated-sources/bnfc/haskell"
+	    srcfile="${bnfc.dir}/${bnfc.artifact}.cf">
+    </uptodate>    
+  </target>
+
   <target name="check-generated-resources"
 	  if="bnfc.generated.resources.available">
     <uptodate property="bnfc.generated.resources.uptodate"
+	    targetfile="${target.dir}/generated-resources/webapp"
+	    srcfile="${bnfc.dir}/${bnfc.artifact}.cf">
+    </uptodate>
+  </target>
+
+  <target name="check-generated-persistence"
+	  if="bnfc.generated.persistence.available">
+    <uptodate property="bnfc.generated.persistence.uptodate"
 	    targetfile="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}/Absyn/persistence/sql"
 	    srcfile="${bnfc.dir}/${bnfc.artifact}.cf">
     </uptodate>
@@ -145,8 +172,18 @@
   <target name="haskell-parser"
 	  depends="haskell-home,generate-haskell,build-haskell,clean-haskell">    
   </target>
-  <target name="generate-doc-xhtml"
-	  depends="haskell-parser">
+  <target name="bnfc-generate-haskell-parser"
+	  depends="check-generated-haskell-sources"
+	  unless="bnfc.generated.sources.haskell.uptodate">
+    <antcall target="haskell-parser"/>
+    <mkdir dir="${target.dir}/generated-sources/bnfc/haskell"/>
+    <copy todir="${target.dir}/generated-sources/bnfc/haskell">
+      <fileset dir="${bnfc.dir}/haskell" />
+    </copy>
+  </target>
+  <target name="bnfc-generate-doc-xhtml"
+	  depends="check-generated-resources,bnfc-generate-haskell-parser"
+	  unless="bnfc.generated.resources.uptodate">
     <exec executable="txt2tags"
 	  failonerror="true"
 	  logerror="true"
@@ -157,23 +194,32 @@
     </exec>
     <copy file="${bnfc.dir}/haskell/Doc${bnfc.artifact}.xhtml"
 	  todir="${bnfc.dir}"/>
+    <mkdir dir="${target.dir}/generated-resources/webapp"/>
+    <copy file="${bnfc.dir}/Doc${bnfc.artifact}.xhtml"
+	  todir="${target.dir}/generated-resources/webapp"/>
+  </target>  
+  <target name="bnfc-deploy-doc-xhtml"
+	  depends="bnfc-generate-doc-xhtml"
+	  unless="bnfc.webapp.resources.uptodate">    
+    <copy file="${target.dir}/generated-resources/webapp/Doc${bnfc.artifact}.xhtml"
+	  todir="${webapp.dir}"/>
   </target>  
   <target name="bnfc-all"
-	  depends="java-parser,generate-doc-xhtml">
+	  depends="java-parser,bnfc-generate-doc-xhtml">
   </target>
   <target name="bnfc-generate"
 	  depends="check-generated-sources"
 	  unless="bnfc.generated.sources.uptodate">
     <antcall target="java-parser"/>
-    <antcall target="generate-doc-xhtml"/>
+    <antcall target="bnfc-generate-doc-xhtml"/>
     <mkdir dir="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}"/>
     <copy todir="${target.dir}/generated-sources/${bnfc.stem.dir}/model/${bnfc.artifact}">
       <fileset dir="${bnfc.dir}/${bnfc.stem.dir}/model/${bnfc.artifact}" />
     </copy>
   </target>
   <target name="bnfc-generate-persistence"
-	  depends="check-generated-resources"
-	  unless="bnfc.generated.resources.uptodate">
+	  depends="check-generated-persistence"
+	  unless="bnfc.generated.persistence.uptodate">
     <java classname="${bnfc.package}.lib.othello.theDesdemona">
 	 <arg value="--projectName"/>
 	 <arg value="${bnfc.artifact}"/>
