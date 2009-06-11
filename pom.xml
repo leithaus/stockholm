@@ -29,6 +29,11 @@
       <url>http://repository.codehaus.org/com/thoughtworks</url>
     </repository>
     <repository>
+      <id>mojo.codehaus.org</id>
+      <name>Codehaus-Mojo</name>
+      <url>http://repository.codehaus.org/org/codehaus/mojo</url>
+    </repository>
+    <repository>
       <releases>
 	<enabled>true</enabled>
 	<updatePolicy>daily</updatePolicy>
@@ -524,6 +529,68 @@
         </componentProperties>
       </configuration>
     </plugin>
+    <plugin>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>sql-maven-plugin</artifactId>
+      <version>1.1</version>
+
+      <dependencies>
+	<!-- specify the dependent jdbc driver here -->
+	<dependency>
+	  <groupId>mysql</groupId>
+	  <artifactId>mysql-connector-java</artifactId>
+	  <version>5.1.6</version>
+	</dependency>
+      </dependencies>
+
+      <!-- common configuration shared by all executions -->
+      <configuration>
+	<driver>com.mysql.jdbc.Driver</driver>
+	<url>jdbc:mysql://localhost/stockholm_bootstrap</url>
+	<username>root</username>
+	<password>phr3dnj0rg3</password>
+      </configuration>
+
+      <executions>
+	<execution>
+	  <id>mysql-drop-db</id>
+	  <phase>package</phase>
+	  <goals>
+	    <goal>execute</goal>
+	  </goals>
+	  <configuration>
+	    <autocommit>true</autocommit>
+	    <sqlCommand>drop database ${artifactId}_production</sqlCommand>
+	    <onError>continue</onError>
+	  </configuration>
+	</execution>
+	<execution>
+	  <id>mysql-create-db</id>
+	  <phase>package</phase>
+	  <goals>
+	    <goal>execute</goal>
+	  </goals>
+	  <configuration>
+	    <autocommit>true</autocommit>
+	    <sqlCommand>create database ${artifactId}_production</sqlCommand>
+	  </configuration>
+	</execution>
+	<execution>
+	  <id>mysql-create-schema</id>
+	  <phase>package</phase>
+	  <goals>
+	    <goal>execute</goal>
+	  </goals>
+	  <configuration>
+	    <autocommit>true</autocommit>
+	    <srcFiles>
+	      <srcFile>${basedir}/target/hibernate3/sql/schema.ddl</srcFile>
+	    </srcFiles>
+	  </configuration>
+	</execution>
+      </executions> 
+    </plugin>
+    
     </plugins>
   </build>
   <reporting>

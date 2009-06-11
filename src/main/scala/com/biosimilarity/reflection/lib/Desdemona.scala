@@ -352,6 +352,115 @@ trait Desdemona {
       typ
     }
 
+    def addIdField(
+      cUnit : CompilationUnit,
+      typ : ClassOrInterfaceDeclaration,
+      idType : String,
+      fldNameQualifier : String
+      ) : ( CompilationUnit, ClassOrInterfaceDeclaration ) = {
+	val idField : FieldDeclaration =
+	  ASTHelper.createFieldDeclaration(
+	    ModifierSet.PRIVATE,
+	    new ClassOrInterfaceType( idType ),
+	    trgtIdFldName + fldNameQualifier
+	  );
+
+	ASTHelper.addMember(typ, idField);
+
+	markAsIdField(
+	  cUnit,
+	  typ,
+	  idField,
+	  idType,
+	  fldNameQualifier
+	  )	
+      }
+
+    def markAsIdField(
+      cUnit : CompilationUnit,
+      typ : ClassOrInterfaceDeclaration,
+      idField : FieldDeclaration,
+      idType : String,
+      fldNameQualifier : String
+      ) : ( CompilationUnit, ClassOrInterfaceDeclaration ) = {
+	markAsIdMember( cUnit, typ, idField, idType, fldNameQualifier )
+      }
+
+    def markAsIdMember(
+      cUnit : CompilationUnit,
+      typ : ClassOrInterfaceDeclaration,
+      idMember : BodyDeclaration,
+      idType : String,
+      fldNameQualifier : String
+      ) : ( CompilationUnit, ClassOrInterfaceDeclaration ) = {
+	if ( idMember.getAnnotations == null ) {
+	  idMember.setAnnotations(
+	    new java.util.LinkedList[AnnotationExpr]()
+	  );
+	}
+
+	addIdAnnotations(
+	  cUnit,
+	  typ,
+	  idMember.getAnnotations,
+	  idType,
+	  fldNameQualifier
+	  )
+      }
+
+    def addIdAnnotations(
+      cUnit : CompilationUnit,
+      typ : ClassOrInterfaceDeclaration,
+      annotations : java.util.List[AnnotationExpr],
+      idType : String,
+      fldNameQualifier : String
+      ) : ( CompilationUnit, ClassOrInterfaceDeclaration ) = {
+      	
+	annotations.add(
+	  new MarkerAnnotationExpr(
+	    ASTHelper.createNameExpr( "Id" )
+	  )
+	);
+	
+	val generatedValueAnnotationDecl : NormalAnnotationExpr =
+	  new NormalAnnotationExpr(
+	    ASTHelper.createNameExpr( "GeneratedValue" ),
+	    new java.util.LinkedList[MemberValuePair]()
+	  );	
+
+	generatedValueAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "generator", 
+	    new StringLiteralExpr( "system-uuid" )
+	  )
+	);
+
+	val genericGeneratorAnnotationDecl : NormalAnnotationExpr =
+	  new NormalAnnotationExpr(
+	    ASTHelper.createNameExpr( "GenericGenerator" ),
+	    new java.util.LinkedList[MemberValuePair]()
+	  );	
+
+	genericGeneratorAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "name", 
+	    new StringLiteralExpr( "system-uuid" )
+	  )
+	);
+
+	genericGeneratorAnnotationDecl.getPairs().add(
+	  new MemberValuePair(
+	    "strategy", 
+	    new StringLiteralExpr( "uuid" )
+	  )
+	);
+
+	annotations.add( generatedValueAnnotationDecl );
+	annotations.add( genericGeneratorAnnotationDecl );
+
+	( cUnit, typ )
+      }
+
     def addSQLResourceClass( cUnit : CompilationUnit )
     : ( CompilationUnit, ClassOrInterfaceDeclaration ) = {
       val typ : ClassOrInterfaceDeclaration = resourceModelDecl.asInstanceOf[ClassOrInterfaceDeclaration]
@@ -451,22 +560,11 @@ trait Desdemona {
 	    )
 	  )
 	);
+
 	typ.getAnnotations.add( inheritanceAnnotationDecl );
 
-	val idField : FieldDeclaration =
-	ASTHelper.createFieldDeclaration(
-	  ModifierSet.PRIVATE,
-	  new ClassOrInterfaceType( "String" ),
-	  trgtIdFldName + "Super"
-	);
-	idField.setAnnotations(
-	  new java.util.LinkedList[AnnotationExpr]()
-	);
-	idField.getAnnotations.add(
-	  new MarkerAnnotationExpr(
-	    ASTHelper.createNameExpr( "Id" )
-	  )
-	)
+	addIdField( cUnit, typ, "String", "Super" );
+
 	// idField.getAnnotations.add(
 // 	  new MarkerAnnotationExpr(
 // 	    ASTHelper.createNameExpr( "GeneratedValue" )
@@ -493,7 +591,7 @@ trait Desdemona {
 // 	  generatorAnnotationDecl
 // 	);
 
-	ASTHelper.addMember(typ, idField);
+	//ASTHelper.addMember(typ, idField);
 	
       }
 
@@ -588,6 +686,8 @@ trait Desdemona {
     }
 
     def addColumnAnnotations(
+      cUnit : CompilationUnit,
+      typ : ClassOrInterfaceDeclaration,
       methodDecl : MethodDeclaration,
       fieldDecl : FieldDeclaration,
       nameStem : String,
@@ -699,16 +799,17 @@ trait Desdemona {
 	      );
 
 	  if (nameStem == trgtIdFldName) {
-	    annotations.add(
-	      new MarkerAnnotationExpr(
-		ASTHelper.createNameExpr( "Id" )
-		)
-	    )
+	    // annotations.add(
+// 	      new MarkerAnnotationExpr(
+// 		ASTHelper.createNameExpr( "Id" )
+// 		)
+// 	    )
 	    // annotations.add(
 // 	      new MarkerAnnotationExpr(
 // 		ASTHelper.createNameExpr( "GeneratedValue" )
 // 	      )
 // 	    )
+	    addIdAnnotations( cUnit, typ, annotations, "String", "" );
 	  }
 	}
 	
@@ -750,11 +851,12 @@ trait Desdemona {
       
       val annotations = new java.util.LinkedList[AnnotationExpr]();
       if (isId) {
-	annotations.add( 
-	  new MarkerAnnotationExpr(
- 	    ASTHelper.createNameExpr( "Id" )
- 	  )
-	);
+	// annotations.add( 
+// 	  new MarkerAnnotationExpr(
+//  	    ASTHelper.createNameExpr( "Id" )
+//  	  )
+// 	);
+	addIdAnnotations( cUnit, typ, annotations, "String", "" );
       }
       val cPairs = new java.util.LinkedList[MemberValuePair]();
       cPairs.add(
@@ -899,6 +1001,8 @@ trait Desdemona {
 	    );
 	  
 	  addColumnAnnotations(
+	    cUnit,
+	    typ,
 	    accessMethod,
 	    member,
 	    nameStem,
