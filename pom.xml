@@ -8,7 +8,7 @@
   <name>rlambda</name>
   <inceptionYear>2007</inceptionYear>
   <properties>
-    <scala.version>2.7.3</scala.version>
+    <scala.version>2.7.4</scala.version>
   </properties>
 
   <repositories>
@@ -188,8 +188,28 @@
     </dependency> 
     <dependency>
       <groupId>org.hibernate</groupId>
+      <artifactId>hibernate-core</artifactId>
+      <version>3.3.1.GA</version>
+    </dependency>
+    <dependency>
+      <groupId>org.hibernate</groupId>
+      <artifactId>hibernate-annotations</artifactId>
+      <version>3.4.0.GA</version>
+    </dependency>
+    <dependency>
+      <groupId>javassist</groupId>
+      <artifactId>javassist</artifactId>
+      <version>3.4.GA</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-jdk14</artifactId>
+      <version>1.5.2</version>
+    </dependency>
+    <dependency>
+      <groupId>org.hibernate</groupId>
       <artifactId>hibernate-entitymanager</artifactId>
-      <version>3.3.2.GA</version>
+      <version>3.4.0.GA</version>
       <exclusions>
 	<exclusion>
 	  <groupId>javax.transaction</groupId>
@@ -267,9 +287,30 @@
           <scalaVersion>${scala.version}</scalaVersion>
 	  <displayCmd>true</displayCmd>
 	  <launchers>
-	    <launcher>
+	    <!-- launcher>
 	      <id>Desdemona</id>
-	      <mainClass>com.biosimilarity.reflection.lib.othello.theDesdemona</mainClass>
+	      <mainClass>com.biosimilarity.reflection.lib.othello.theDesdemona</mainClass -->
+	      <!-- args are optional -->
+	      <!-- args -->
+	        <!-- replace _ with - when uncommenting  -->
+		<!-- arg>__projectName</arg -->
+		<!-- arg>${artifactId}</arg -->
+		<!-- arg>__groupId</arg -->
+		<!-- arg>${groupId}</arg -->
+		<!-- arg>__storeName</arg -->
+		<!-- arg>${artifactId}_development</arg -->
+		<!-- arg>__srcLocation</arg -->
+		<!-- arg>${basedir}/target/generated-sources</arg -->
+	      <!-- /args -->
+	      <!-- jvmArgs are optional -->
+	      <!-- <jvmArgs> -->
+<!-- 		<jvmArg>-Xmx128m</jvmArg> -->
+<!-- 		<jvmArg>-Djava.library.path=...</jvmArg> -->
+<!-- 	      </jvmArgs> -->
+	    <!-- /launcher -->
+	    <launcher>
+	      <id>Bianca</id>
+	      <mainClass>com.biosimilarity.reflection.lib.othello.theBianca</mainClass>
 	      <!-- args are optional -->
 	      <args>
 		<arg>--projectName</arg>
@@ -499,7 +540,8 @@
       <plugin>
       <groupId>org.codehaus.mojo</groupId>
       <artifactId>hibernate3-maven-plugin</artifactId>
-      <version>2.0-alpha-2</version>
+      <!-- version>2.0-alpha-2</version -->
+      <version>2.2</version>
       <executions>
         <execution>
           <phase>process-classes</phase>

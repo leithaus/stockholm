@@ -28,10 +28,13 @@ trait Desdemona {
       List(
 	"javax.persistence.CascadeType",
 	"javax.persistence.Column",
+	"javax.persistence.JoinColumn",
+	"javax.persistence.PrimaryKeyJoinColumn",
 	"javax.persistence.Entity",
 	"javax.persistence.FetchType",
 	"javax.persistence.Id",
 	"javax.persistence.OneToMany",
+	"javax.persistence.OneToOne",
 	"javax.persistence.Table",
 	"javax.persistence.UniqueConstraint",	
 	"javax.persistence.MappedSuperclass",	
@@ -487,7 +490,9 @@ trait Desdemona {
 	  new MemberValuePair(
 	    "strategy", 
 	    new NameExpr(
-	      "InheritanceType.TABLE_PER_CLASS"
+	      //"InheritanceType.TABLE_PER_CLASS"
+	      //"InheritanceType.JOINED_TABLE"
+	      "InheritanceType.SINGLE_TABLE"
 	    )
 	  )
 	);
@@ -685,6 +690,78 @@ trait Desdemona {
        && (ftypName.substring( 0, 4 ) == "List") ) 
     }
 
+    val _groundTypes : List[String] =
+      List(
+	"byte",
+	"short",
+	"int",
+	"long",
+	"float",
+	"double",
+	"boolean",
+	"char",
+	"Byte",
+	"Short",	
+	"Integer",
+	"Long",
+	"Float",
+	"Double",
+	"Char",
+	"String",
+	"Date"
+	)
+
+    def groundTypes : List[String] =
+      _groundTypes
+
+    def getUltimateTypeName( typ : Type ) : String = {
+      typ match {
+	case cOrIType : ClassOrInterfaceType => {
+	  cOrIType.getName
+	}
+	case primType : PrimitiveType => {
+	  primType.getType match {
+	    case PrimitiveType.Primitive.Boolean => "Boolean"
+	    case PrimitiveType.Primitive.Char => "Char"
+	    case PrimitiveType.Primitive.Byte => "Byte"
+	    case PrimitiveType.Primitive.Short => "Short"
+	    case PrimitiveType.Primitive.Int => "Int"
+	    case PrimitiveType.Primitive.Long => "Long"
+	    case PrimitiveType.Primitive.Float => "Float"
+	    case PrimitiveType.Primitive.Double => "Double"
+	  }
+	}
+	case refType : ReferenceType => {
+	  getUltimateTypeName( refType.getType )
+	}
+	case t => throw new Exception( "type not handled, yet: " + t )
+      }
+    }
+
+    def isGroundType( typ : Type ) : Boolean = {
+      typ match {
+	case cOrIType : ClassOrInterfaceType => {
+	  groundTypes.contains( cOrIType.getName )
+	}
+	case primType : PrimitiveType => {
+	  true
+	}
+	case refType : ReferenceType => {
+	  isGroundType( refType.getType )
+	}
+	case t => throw new Exception( "type not handled, yet: " + t )
+      }
+    }
+    def calculateColumnType( fieldDecl : FieldDeclaration )
+    : String = {
+      if ( isGroundType( fieldDecl.getType ) ) { 
+	"Column" 
+      }
+      else {
+	"JoinColumn"
+      }
+    }
+
     def addColumnAnnotations(
       cUnit : CompilationUnit,
       typ : ClassOrInterfaceDeclaration,
@@ -692,13 +769,7 @@ trait Desdemona {
       fieldDecl : FieldDeclaration,
       nameStem : String,
       annotations : java.util.LinkedList[AnnotationExpr]
-      ) : MethodDeclaration = {
-	val cPairs = new java.util.LinkedList[MemberValuePair]();
-	val columnAnnotation : NormalAnnotationExpr =
-	  new NormalAnnotationExpr(
-	    null,
-	    cPairs
-	  );
+      ) : MethodDeclaration = {	
 	// BUGBUG -- LGM might not be this kind of type
 	val ftypName =
 	  fieldDecl.getType match {
@@ -712,110 +783,160 @@ trait Desdemona {
 	      throw new Exception( "class type not yet handled" )
 	    }
 	  };
+	val isCollectionColumn : Boolean =
+	  ((ftypName.length > 4) && (ftypName.substring( 0, 4 ) == "List"));
 
-	if ( (ftypName.length > 4)
-	    && (ftypName.substring( 0, 4 ) == "List") ) {
-	  val cascadeType : ArrayInitializerExpr =
-	    new ArrayInitializerExpr(
-	      new java.util.LinkedList[Expression]()
+	val columnType : String = calculateColumnType( fieldDecl );	
+	var columnAnnotation : AnnotationExpr = null ;
+
+	if ( columnType == "JoinColumn" ) {
+	  columnAnnotation =
+	    new MarkerAnnotationExpr(
+	      ASTHelper.createNameExpr( columnType )
 	    );
-	      cascadeType.getValues().add( 
-		new FieldAccessExpr(
-		  new NameExpr( "CascadeType" ),
-		  "ALL"
-		)
-	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "cascade",
-		  cascadeType
-		)
-	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "fetch",
-		  new FieldAccessExpr(
-		    new NameExpr( "FetchType" ),
-		    "LAZY"
-		  )
-		)
-	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "mappedBy",
-		  new StringLiteralExpr(
-		    (trgtResourceClassName.substring( 0, 1 ).toLowerCase
-		     + trgtResourceClassName.substring(
-		       1,
-		       trgtResourceClassName.length ))
-		  )
-		)
-	      );
-	      // cPairs.add(
-// 		new MemberValuePair(
-// 		  "targetEntity",
-// 		  new NameExpr(
-// 		    ftypName.substring( 4, ftypName.length ) + ".class"
-// 		  )
-// 		)
-// 	      );
-	      columnAnnotation.setName(
-		ASTHelper.createNameExpr( "OneToMany" )
-	      );
-	    }
+	  val oneToOneAnnotation : MarkerAnnotationExpr =
+	    new MarkerAnnotationExpr(
+	      ASTHelper.createNameExpr( "OneToOne" )
+	    );
+	  // val oneToOneAnnotation : NormalAnnotationExpr =
+	  // 	    new NormalAnnotationExpr(
+	  // 	      ASTHelper.createNameExpr( "OneToOne" ),
+	  // 	      new java.util.LinkedList[MemberValuePair]()
+	  // 	    );
+	  // 	  val cascadeType : ArrayInitializerExpr =
+	  // 	    new ArrayInitializerExpr(
+	  // 	      new java.util.LinkedList[Expression]()
+	  // 	    );
+	  // 	  cascadeType.getValues().add( 
+	  // 	    new FieldAccessExpr(
+	  // 	      new NameExpr( "CascadeType" ),
+	  // 	      "ALL"
+	  // 	    )
+	  // 	  );
+	  // 	  oneToOneAnnotation.getPairs().add(
+	  // 	    new MemberValuePair(
+	  // 	      "cascade",
+	  // 	      cascadeType
+	  // 	    )
+	  // 	  );
+	  // 	  oneToOneAnnotation.getPairs().add(
+	  // 	    new MemberValuePair(
+	  // 	      "fetch",
+	  // 	      new FieldAccessExpr(
+	  // 		new NameExpr( "FetchType" ),
+	  // 		"LAZY"
+	  // 	      )
+	  // 	    )
+	  // 	  )
+	  
+	  // val pKJColumnAnnotation =
+	  // 	    new MarkerAnnotationExpr(
+	  // 	      new NameExpr( "PrimaryKeyJoinColumn" )
+	  // 	    )
+	  
+	  annotations.add( oneToOneAnnotation );
+	  //annotations.add( pKJColumnAnnotation )
+	}
 	else {
-	      cPairs.add(
-		new MemberValuePair(
-		  "name",
-		  new StringLiteralExpr( nameStem )
-		)
-	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "unique",
-		  new BooleanLiteralExpr( false )
-		)
-	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "nullable",
-		  new BooleanLiteralExpr( true )
-		)
-	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "insertable",
-		  new BooleanLiteralExpr( true )
-		)
-	      );
-	      cPairs.add(
-		new MemberValuePair(
-		  "updatable",
-		  new BooleanLiteralExpr( true )
-		)
-	      );
-	      columnAnnotation.setName(
-		ASTHelper.createNameExpr( "Column" )
-	      );
+	  val cPairs = new java.util.LinkedList[MemberValuePair]();
+	  columnAnnotation =
+	    new NormalAnnotationExpr(
+	      ASTHelper.createNameExpr(
+		if ( isCollectionColumn ) {
+		  "OneToMany"
+		}
+		else {
+		  columnType
+		}),
+	      cPairs
+	    );
 
-	  if (nameStem == trgtIdFldName) {
-	    // annotations.add(
-// 	      new MarkerAnnotationExpr(
-// 		ASTHelper.createNameExpr( "Id" )
-// 		)
-// 	    )
-	    // annotations.add(
-// 	      new MarkerAnnotationExpr(
-// 		ASTHelper.createNameExpr( "GeneratedValue" )
-// 	      )
-// 	    )
-	    addIdAnnotations( cUnit, typ, annotations, "String", "" );
+	  if ( isCollectionColumn ) {
+		val cascadeType : ArrayInitializerExpr =
+		  new ArrayInitializerExpr(
+		    new java.util.LinkedList[Expression]()
+		  );
+		cascadeType.getValues().add( 
+		  new FieldAccessExpr(
+		    new NameExpr( "CascadeType" ),
+		    "ALL"
+		  )
+		);
+		cPairs.add(
+		  new MemberValuePair(
+		    "cascade",
+		    cascadeType
+		  )
+		);
+		cPairs.add(
+		  new MemberValuePair(
+		    "fetch",
+		    new FieldAccessExpr(
+		      new NameExpr( "FetchType" ),
+		      "LAZY"
+		    )
+		  )
+		);
+		cPairs.add(
+		  new MemberValuePair(
+		    "mappedBy",
+		    new StringLiteralExpr(
+		      (trgtResourceClassName.substring( 0, 1 ).toLowerCase
+		       + trgtResourceClassName.substring(
+			 1,
+			 trgtResourceClassName.length ))
+		    )
+		  )
+		);
+		// cPairs.add(
+		// 		new MemberValuePair(
+		// 		  "targetEntity",
+		// 		  new NameExpr(
+		// 		    ftypName.substring( 4, ftypName.length ) + ".class"
+		// 		  )
+		// 		)
+		// 	      );
+	      }
+	  else {
+	    cPairs.add(
+	      new MemberValuePair(
+		"name",
+		new StringLiteralExpr( nameStem )
+	      )
+	    );
+	    cPairs.add(
+	      new MemberValuePair(
+		"unique",
+		new BooleanLiteralExpr( false )
+	      )
+	    );
+	    cPairs.add(
+	      new MemberValuePair(
+		"nullable",
+		new BooleanLiteralExpr( true )
+	      )
+	    );
+	    cPairs.add(
+	      new MemberValuePair(
+		"insertable",
+		new BooleanLiteralExpr( true )
+	      )
+	    );
+	    cPairs.add(
+	      new MemberValuePair(
+		"updatable",
+		new BooleanLiteralExpr( true )
+	      )
+	    );	  
+	    
+	    if (nameStem == trgtIdFldName) {
+	      addIdAnnotations( cUnit, typ, annotations, "String", "" );
+	    }
 	  }
 	}
 	
-	annotations.add( columnAnnotation );
-	methodDecl.setAnnotations( annotations );
-	
+	annotations.add( columnAnnotation );	
+	methodDecl.setAnnotations( annotations );	
 	methodDecl
       }
 
@@ -1015,41 +1136,47 @@ trait Desdemona {
 	    new ReturnStmt( accessCallModel )
 	  );
 	  
-	  if (!ModifierSet.isFinal( member.getModifiers )) {
-	    val updateMethod : MethodDeclaration =
-	      new MethodDeclaration(
-		ModifierSet.PUBLIC,
-		ASTHelper.VOID_TYPE, 
-		camelBackAccessor( nameStem, "set" )
-	      );
-	    val updateParam : Parameter =
-	      ASTHelper.createParameter(
-		trgtRenderType( cUnit, typ, member ),
-		nameStem
-	      );
-	    val updateBlock : BlockStmt = new BlockStmt();
-	    val updateCallModel : FieldAccessExpr =	      
-	      new FieldAccessExpr( new ThisExpr(), nameStem );
-	    val updateExpr : AssignExpr =
-	      new AssignExpr(
-		updateCallModel,
-		new NameExpr( nameStem ),
-		AssignExpr.Operator.assign
-	      );	    
-	    updateMethod.setBody( updateBlock );
-	    ASTHelper.addStmt(
-	      updateBlock,
-	      updateExpr
-	    );
-	    updateMethod.setParameters(
-	      new java.util.LinkedList[Parameter]()
-	    );
-	    updateMethod.getParameters.add( updateParam );
-	    
-	    ASTHelper.addMember( typ, updateMethod );
+	  if ( ModifierSet.isFinal( member.getModifiers ) ) {
+	    member.setModifiers(
+	      ModifierSet.removeModifier(
+		member.getModifiers,
+		ModifierSet.FINAL
+	      )
+	    )
 	  }
+
+	  val updateMethod : MethodDeclaration =
+	    new MethodDeclaration(
+	      ModifierSet.PUBLIC,
+	      ASTHelper.VOID_TYPE, 
+	      camelBackAccessor( nameStem, "set" )
+	    );
+	  val updateParam : Parameter =
+	    ASTHelper.createParameter(
+	      trgtRenderType( cUnit, typ, member ),
+	      nameStem
+	    );
+	  val updateBlock : BlockStmt = new BlockStmt();
+	  val updateCallModel : FieldAccessExpr =	      
+	    new FieldAccessExpr( new ThisExpr(), nameStem );
+	  val updateExpr : AssignExpr =
+	    new AssignExpr(
+	      updateCallModel,
+	      new NameExpr( nameStem ),
+	      AssignExpr.Operator.assign
+	    );	    
+	  updateMethod.setBody( updateBlock );
+	  ASTHelper.addStmt(
+	    updateBlock,
+	    updateExpr
+	  );
+	  updateMethod.setParameters(
+	    new java.util.LinkedList[Parameter]()
+	  );
+	  updateMethod.getParameters.add( updateParam );
 	  
 	  ASTHelper.addMember( typ, accessMethod );	    	    
+	  ASTHelper.addMember( typ, updateMethod );	  	  
 	}
 
       val containedFields : Seq[FieldDeclaration]

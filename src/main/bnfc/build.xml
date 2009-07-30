@@ -220,7 +220,8 @@
   <target name="bnfc-generate-persistence"
 	  depends="check-generated-persistence"
 	  unless="bnfc.generated.persistence.uptodate">
-    <java classname="${bnfc.package}.lib.othello.theDesdemona">
+    <!-- java classname="${bnfc.package}.lib.othello.theDesdemona" -->
+    <java classname="${bnfc.package}.lib.othello.theBianca">
 	 <arg value="--projectName"/>
 	 <arg value="${bnfc.artifact}"/>
 	 <arg value="--groupId"/>
