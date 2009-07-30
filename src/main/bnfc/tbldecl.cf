@@ -1,0 +1,80 @@
+-- -*- mode: Haskell;-*- 
+-- Filename:    tbldecl.cf 
+-- Authors:     lgm                                                    
+-- Creation:    Mon Jul 27 09:52:49 2009 
+-- Copyright:   Not supplied 
+-- Description: 
+-- ------------------------------------------------------------------------
+
+EntryPoint      . Expression                    ::= TableDecl ";"                 ;
+
+AnnotatedTblDecl . TableDecl                    ::= "/* Table mapping */" "object" TableClassName "extends" "/* Table shape */" "Table" "[" TableTypeDecls "]" "(" TableStoreName ")" "/* Table access */" TableBody ;
+
+TblDecl         . TableDecl                     ::= "object" Ident "extends" "Table" "[" "(" [TableTypeDecl] ")" "]" "(" String ")" "{" [TableMthdDecl] "}" ;
+
+TblClassName    . TableClassName                ::= Ident                         ;
+TblTypeDecls    . TableTypeDecls                ::= "(" [TableTypeDecl] ")"       ;
+TblStoreName    . TableStoreName                ::= String                        ;
+TblBody         . TableBody                     ::= "{" [TableMethodDecl] "}"     ;
+
+TblGroundType   . TableTypeDecl                 ::= TableGroundType               ;
+TblCompType     . TableTypeDecl                 ::= TableCompositeType            ;
+
+TblGrndTypeBool . TableGroundType               ::= "Boolean"                     ;
+TblGrndTypeInt  . TableGroundType               ::= "Int"                         ;
+TblGrndTypeFloat . TableGroundType              ::= "Float"                       ;
+TblGrndTypeStr  . TableGroundType               ::= "String"                      ;
+
+TblNamedType    . TableCompositeType            ::= Ident                         ;
+
+TblColCtorDecl  . TableMethodDecl               ::= "def" TableColumnName "=" TableColumnCtor TableColumnArgs ";" ;
+TblProjCtorDecl . TableMethodDecl               ::= "def" "*" "=" [TableProjection] ";" ;
+
+TblColCtorMDecl . TableMthdDecl                 ::= "def" Ident "=" TableColumnGTCtor "(" String [TableColumnOption] ")" ";" ;
+TblProjCtorMDecl . TableMthdDecl                ::= "def" "*" "=" [Ident] ";" ;
+
+TblColumnName   . TableColumnName               ::= Ident                         ;
+TblColumnGTCtor . TableColumnCtor               ::= TableColumnGTCtor             ;
+TblColumnArgs   . TableColumnArgs               ::= "(" String TableColumnOptions ")" ;
+
+TblColGTCtorBool . TableColumnGTCtor             ::= "booleanColumn"              ;
+TblColGTCtorInt . TableColumnGTCtor             ::= "intColumn"                   ;
+TblColGTCtorStr . TableColumnGTCtor             ::= "stringColumn"                ;
+
+TblColumnOptions . TableColumnOptions           ::= [TableColumnOption]           ;
+TblColumnAutoInc . TableColumnOption            ::= "O.AutoInc"                   ;
+TblColumnNotNull . TableColumnOption            ::= "O.NotNull"                   ;
+TblColumnDefault . TableColumnOption            ::= "O.Default" "(" TableDefaultValue ")" ;
+
+TblDefaultValBool . TableDefaultValue           ::= TableBoolean                  ;
+TblDefaultValInt . TableDefaultValue            ::= Integer                       ;
+TblDefaultValStr . TableDefaultValue            ::= String                        ;
+
+TblProjection    . TableProjection              ::= Ident                         ;
+
+BoolLitTrue      . TableBoolean                 ::= "true"                        ;
+BoolLitFalse     . TableBoolean                 ::= "false"                       ;
+
+[]               . [TableTypeDecl]              ::=                               ;
+(: [])           . [TableTypeDecl]              ::= TableTypeDecl                 ;
+(:)              . [TableTypeDecl]              ::= TableTypeDecl "," [TableTypeDecl] ;
+
+[]               . [TableMethodDecl]            ::=                               ;
+--(: [])           . [TableMethodDecl]            ::= TableMethodDecl               ;
+(:)              . [TableMethodDecl]            ::= TableMethodDecl [TableMethodDecl] ;
+
+[]               . [TableMthdDecl]              ::=                               ;
+--(: [])           . [TableMthdDecl]            ::= TableMthdDecl               ;
+(:)              . [TableMthdDecl]              ::= TableMthdDecl [TableMthdDecl] ;
+
+[]               . [TableProjection]            ::=                               ;
+(: [])           . [TableProjection]            ::= TableProjection               ;
+(:)              . [TableProjection]            ::= TableProjection "~" [TableProjection] ;
+
+[]               . [Ident]                      ::=                               ;
+(: [])           . [Ident]                      ::= Ident                         ;
+(:)              . [Ident]                      ::= Ident "~" [Ident]             ;
+
+[]               . [TableColumnOption]          ::=                               ;
+(: [])           . [TableColumnOption]          ::= TableColumnOption             ;
+(:)              . [TableColumnOption]          ::= TableColumnOption "," [TableColumnOption] ;
